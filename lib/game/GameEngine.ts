@@ -51,6 +51,40 @@ export class GameEngine {
       tile,
     };
   }
+
+  buyProperty(playerId: string, propertyId: number): boolean {
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player) return false;
+
+    const property = this.board.getProperty(propertyId);
+    if (!property || property.ownerId !== null) return false;
+
+    if (player.money < property.price) return false;
+
+    player.deductMoney(property.price);
+    player.addProperty(propertyId);
+    this.board.setPropertyOwner(propertyId, playerId);
+
+    return true;
+  }
+
+  payRent(payerId: string, propertyId: number): boolean {
+    const payer = this.players.find((p) => p.id === payerId);
+    const property = this.board.getProperty(propertyId);
+
+    if (!payer || !property || !property.ownerId) return false;
+    if (property.ownerId === payerId) return false; // Não paga para si mesmo
+
+    const owner = this.players.find((p) => p.id === property.ownerId);
+    if (!owner) return false;
+
+    const rent = property.rent;
+
+    payer.deductMoney(rent);
+    owner.addMoney(rent);
+
+    return true;
+  }
 }
 
 export default GameEngine;

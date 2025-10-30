@@ -22,11 +22,8 @@ export class Player implements IPlayer {
   }
 
   deductMoney(amount: number): boolean {
-    if (this.money >= amount) {
-      this.money -= amount;
-      return true;
-    }
-    return false;
+    this.money -= amount;
+    return true;
   }
 
   isBankrupt(): boolean {
