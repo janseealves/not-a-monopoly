@@ -3,13 +3,17 @@ interface GameControlsProps {
   onEndTurn: () => void;
   canBuyProperty: boolean;
   disabled?: boolean;
+  propertyPrice?: number;
+  propertyName?: string;
 }
 
 export default function GameControls({
   onBuyProperty,
   onEndTurn,
   canBuyProperty,
-  disabled = false
+  disabled = false,
+  propertyPrice,
+  propertyName
 }: GameControlsProps) {
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg">
@@ -28,7 +32,15 @@ export default function GameControls({
             }
           `}
         >
-          🏠 Buy Property
+          {canBuyProperty && propertyPrice && propertyName ? (
+            <div className="flex flex-col">
+              <span className="text-sm">🏠 Buy Property</span>
+              <span className="text-xs mt-1">{propertyName}</span>
+              <span className="text-lg font-bold mt-1">${propertyPrice}</span>
+            </div>
+          ) : (
+            '🏠 Buy Property'
+          )}
         </button>
 
         <button

@@ -13,6 +13,7 @@ export default function Home() {
   const [hasRolled, setHasRolled] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastRoll, setLastRoll] = useState<number | null>(null);
+  const [lastRentTransaction, setLastRentTransaction] = useState<{ amount: number; paidTo?: string; receivedFrom?: string } | null>(null);
 
   // Initialize game on mount
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function Home() {
 
     setHasRolled(true);
     setLastRoll(result);
+    setLastRentTransaction(null); // Clear previous rent notification
     setMessage(`${currentPlayer.name} rolled ${result}. Moving...`);
     
     // Animate the movement
@@ -63,7 +65,7 @@ export default function Home() {
     const finalTile = game.board.tiles[currentPlayer.position];
     console.log('[ROLL] After:', currentPlayer.name, 'position:', currentPlayer.position);
 
-    // Check if can buy property
+    // Check if can buy property or pay rent
     let logMsg = `${currentPlayer.name} rolled ${result} and moved to ${finalTile.name}`;
     if (finalTile.property && !finalTile.property.ownerId) {
       if (currentPlayer.money >= finalTile.property.price) {
@@ -73,10 +75,18 @@ export default function Home() {
         logMsg += ` - Too expensive! ($${finalTile.property.price})`;
         setMessage(`${finalTile.name} costs $${finalTile.property.price} but you only have $${currentPlayer.money}`);
       }
-    } else if (finalTile.property?.ownerId) {
+    } else if (finalTile.property?.ownerId && finalTile.property.ownerId !== currentPlayer.id) {
+      // Pay rent to owner
       const owner = game.players.find(p => p.id === finalTile.property!.ownerId);
-      logMsg += ` - Owned by ${owner?.name}`;
-      setMessage(`${finalTile.name} is owned by ${owner?.name}`);
+      const rentAmount = finalTile.property.rent;
+      const success = game.payRent(currentPlayer.id, finalTile.property.id);
+      
+      if (success) {
+        logMsg += ` - Paid $${rentAmount} rent to ${owner?.name}`;
+        setMessage(`💸 Paid $${rentAmount} rent to ${owner?.name} for ${finalTile.name}`);
+        setLastRentTransaction({ amount: rentAmount, paidTo: owner?.name });
+      }
+      forceUpdate();
     } else {
       setMessage(logMsg);
     }
@@ -115,7 +125,7 @@ export default function Home() {
 
     setLogs(prev => [...prev, `${currentPlayer.name} ended their turn`]);
     setIsProcessing(true);
-    setLastRoll(null); // Reset dice display
+    setLastRentTransaction(null); // Clear rent notification
     
     game.nextTurn();
     forceUpdate();
@@ -182,12 +192,18 @@ export default function Home() {
           }
         } else if (property.ownerId !== currentAI.id) {
           // Pay rent
+          const owner = game.players.find(p => p.id === property.ownerId);
           const success = game.payRent(currentAI.id, property.id);
           if (success) {
-            const owner = game.players.find(p => p.id === property.ownerId);
             console.log(`[AI TURN] ${currentAI.name} paid rent to ${owner?.name}`);
             setLogs(prev => [...prev, `${currentAI.name} paid $${property.rent} rent to ${owner?.name}`]);
-            setMessage(`${currentAI.name} paid rent`);
+            setMessage(`💸 ${currentAI.name} paid $${property.rent} rent to ${owner?.name}`);
+            
+            // Check if human player received rent
+            if (property.ownerId === '1') { // Human player is ID '1'
+              setLastRentTransaction({ amount: property.rent, receivedFrom: currentAI.name });
+            }
+            
             forceUpdate();
           }
         }
@@ -201,7 +217,6 @@ export default function Home() {
     }
     
     console.log('[AI TURNS] All AI turns completed. Back to human turn.');
-    setLastRoll(null); // Clear dice display for next human turn
   };
 
   if (!game || !gameState) {
@@ -227,60 +242,87 @@ export default function Home() {
     currentPlayer.money >= currentTile.property.price
   );
 
+  // Get property details for buy button
+  const buyableProperty = canBuyProperty && currentTile?.property ? {
+    name: currentTile.property.name,
+    price: currentTile.property.price
+  } : undefined;
+
   return (
     <div className="min-h-screen bg-gray-100">
-      <h1 className="text-4xl font-bold text-center py-4 text-gray-800">
-        🎲 Not-A-Monopoly 🎲
-      </h1>
-      
-      {/* Debug info */}
-      <div className="text-center text-sm text-gray-600 pb-2">
-        <span className="font-bold">Current Player: {currentPlayer?.name}</span>
-        {' | '}
-        <span className={`ml-2 ${humanTurn ? 'text-green-600 font-bold' : 'text-red-600'}`}>
-          {humanTurn ? '✓ YOUR TURN' : '⏳ AI PLAYING'}
-        </span>
-        {' | '}
-        <span className="ml-2">Rolled: {hasRolled ? '✓' : '✗'}</span>
-        {' | '}
-        <span className="ml-2">Processing: {isProcessing ? '⏳' : '✗'}</span>
-        {' | '}
-        {lastRoll && <span className="ml-2 font-bold text-blue-600">🎲 Dice: {lastRoll}</span>}
-      </div>
+      <div className="container mx-auto px-4 py-6">
+        <h1 className="text-4xl font-bold text-center mb-4 text-gray-800">
+          🎲 Not-A-Monopoly 🎲
+        </h1>
+        
+        {/* Debug info */}
+        <div className="text-center text-sm text-gray-600 mb-6">
+          <span className="font-bold">Current Player: {currentPlayer?.name}</span>
+          {' | '}
+          <span className={`ml-2 ${humanTurn ? 'text-green-600 font-bold' : 'text-red-600'}`}>
+            {humanTurn ? '✓ YOUR TURN' : '⏳ AI PLAYING'}
+          </span>
+          {' | '}
+          <span className="ml-2">Rolled: {hasRolled ? '✓' : '✗'}</span>
+          {' | '}
+          <span className="ml-2">Processing: {isProcessing ? '⏳' : '✗'}</span>
+          {' | '}
+          {lastRoll && <span className="ml-2 font-bold text-blue-600">🎲 Dice: {lastRoll}</span>}
+        </div>
 
-      <div className="flex gap-4 p-4">
-        {/* Left Sidebar */}
-        <div className="w-64 space-y-4">
-          {/* Show last roll */}
-          {lastRoll && (
+        <div className="grid grid-cols-12 gap-6">
+          {/* Left Sidebar - Controls */}
+          <div className="col-span-12 lg:col-span-3 space-y-4">
+            {/* Always show last roll card */}
             <div className="bg-gradient-to-r from-blue-500 to-purple-500 text-white p-4 rounded-lg shadow-lg text-center">
               <div className="text-sm font-semibold mb-1">Last Roll</div>
-              <div className="text-4xl font-bold">🎲 {lastRoll}</div>
+              <div className="text-4xl font-bold">
+                {lastRoll ? `🎲 ${lastRoll}` : '🎲 -'}
+              </div>
             </div>
-          )}
-          
-          <DiceRoller 
-            onRoll={handleRoll} 
-            disabled={!humanTurn || hasRolled || isProcessing}
-            reset={!hasRolled}
-          />
-          <GameControls
-            onBuyProperty={handleBuyProperty}
-            onEndTurn={handleEndTurn}
-            canBuyProperty={canBuyProperty}
-            disabled={!humanTurn || !hasRolled || isProcessing}
-          />
-        </div>
 
-        {/* Center - Board (takes remaining space) */}
-        <div className="flex-1 flex items-center justify-center">
-          <Board gameState={gameState} />
-        </div>
+            {/* Rent transaction notification */}
+            {lastRentTransaction && (
+              <div className={`p-4 rounded-lg shadow-lg text-center text-white ${
+                lastRentTransaction.paidTo 
+                  ? 'bg-gradient-to-r from-red-500 to-orange-500' 
+                  : 'bg-gradient-to-r from-green-500 to-emerald-500'
+              }`}>
+                <div className="text-sm font-semibold mb-1">
+                  {lastRentTransaction.paidTo ? '💸 Paid Rent' : '💰 Received Rent'}
+                </div>
+                <div className="text-3xl font-bold">${lastRentTransaction.amount}</div>
+                <div className="text-xs mt-1">
+                  {lastRentTransaction.paidTo && `to ${lastRentTransaction.paidTo}`}
+                  {lastRentTransaction.receivedFrom && `from ${lastRentTransaction.receivedFrom}`}
+                </div>
+              </div>
+            )}
+            
+            <DiceRoller 
+              onRoll={handleRoll} 
+              disabled={!humanTurn || hasRolled || isProcessing}
+            />
+            <GameControls
+              onBuyProperty={handleBuyProperty}
+              onEndTurn={handleEndTurn}
+              canBuyProperty={canBuyProperty}
+              disabled={!humanTurn || !hasRolled || isProcessing}
+              propertyPrice={buyableProperty?.price}
+              propertyName={buyableProperty?.name}
+            />
+          </div>
 
-        {/* Right Sidebar */}
-        <div className="w-80 space-y-4">
-          <GameStatus round={gameState.round} message={message} logs={logs} />
-          <PlayerList players={gameState.players} currentPlayerIndex={gameState.currentPlayerIndex} />
+          {/* Center - Board */}
+          <div className="col-span-12 lg:col-span-6 flex items-start justify-center pt-4">
+            <Board gameState={gameState} />
+          </div>
+
+          {/* Right Sidebar - Info */}
+          <div className="col-span-12 lg:col-span-3 space-y-4">
+            <GameStatus round={gameState.round} message={message} logs={logs} />
+            <PlayerList players={gameState.players} currentPlayerIndex={gameState.currentPlayerIndex} />
+          </div>
         </div>
       </div>
     </div>

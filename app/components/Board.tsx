@@ -56,25 +56,25 @@ const BOARD_TILES = [
 ];
 
 export default function Board({ gameState }: BoardProps) {
-  // Split tiles into 4 sides - corners belong to horizontal rows
-  const bottomTiles = BOARD_TILES.slice(0, 11);          // 0-10: GO → JAIL (11 tiles including both corners)
-  const rightTiles = BOARD_TILES.slice(11, 20);          // 11-19: Right side (9 tiles, NO corners)
-  const topTiles = BOARD_TILES.slice(20, 31).toReversed();    // 20-30: Free Parking → GO TO JAIL (11 tiles including both corners, reversed)
-  const leftTiles = BOARD_TILES.slice(31, 40).toReversed();   // 31-39: Left side (9 tiles, NO corners)
+  // Split tiles into 4 sides - maintaining correct Monopoly order
+  const bottomTiles = BOARD_TILES.slice(0, 11);          // 0-10: GO → JAIL (left to right)
+  const rightTiles = BOARD_TILES.slice(11, 20);          // 11-19: Right side (bottom to top)
+  const topTiles = BOARD_TILES.slice(20, 31);            // 20-30: Free Parking → GO TO JAIL (left to right, needs reverse for display)
+  const leftTiles = BOARD_TILES.slice(31, 40);           // 31-39: Left side (top to bottom, needs reverse for display)
 
   return (
     <div className="bg-gradient-to-br from-green-100 to-emerald-200 p-2 rounded-xl shadow-2xl inline-block">
       
-      {/* Top Row (20-30) */}
+      {/* Top Row (20-30) - display right to left */}
       <div className="flex gap-0">
-        {topTiles.map((tile) => (
+        {topTiles.toReversed().map((tile) => (
           <Tile key={tile.pos} tile={tile} players={gameState.players} gameState={gameState} />
         ))}
       </div>
 
       {/* Middle section */}
       <div className="flex gap-0">
-        {/* Left Column (31-39) - NO corner */}
+        {/* Left Column (31-39) - display top to bottom */}
         <div className="flex flex-col gap-0">
           {leftTiles.map((tile) => (
             <Tile key={tile.pos} tile={tile} players={gameState.players} gameState={gameState} />
@@ -91,15 +91,15 @@ export default function Board({ gameState }: BoardProps) {
           </div>
         </div>
 
-        {/* Right Column (11-19) - NO corner */}
+        {/* Right Column (11-19) - display bottom to top (reverse order) */}
         <div className="flex flex-col gap-0">
-          {rightTiles.map((tile) => (
+          {rightTiles.toReversed().map((tile) => (
             <Tile key={tile.pos} tile={tile} players={gameState.players} gameState={gameState} />
           ))}
         </div>
       </div>
 
-      {/* Bottom Row (0-10) */}
+      {/* Bottom Row (0-10) - display left to right */}
       <div className="flex gap-0">
         {bottomTiles.map((tile) => (
           <Tile key={tile.pos} tile={tile} players={gameState.players} gameState={gameState} />

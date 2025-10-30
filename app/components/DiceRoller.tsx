@@ -1,21 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface DiceRollerProps {
   onRoll: (result: number) => void;
   disabled?: boolean;
-  reset?: boolean;
 }
 
-export default function DiceRoller({ onRoll, disabled = false, reset = false }: DiceRollerProps) {
+export default function DiceRoller({ onRoll, disabled = false }: DiceRollerProps) {
   const [rolling, setRolling] = useState(false);
-  const [lastRoll, setLastRoll] = useState<number | null>(null);
-
-  // Reset the dice display when reset prop changes
-  useEffect(() => {
-    if (reset) {
-      setLastRoll(null);
-    }
-  }, [reset]);
 
   const handleRoll = () => {
     if (rolling || disabled) return;
@@ -25,7 +16,6 @@ export default function DiceRoller({ onRoll, disabled = false, reset = false }: 
     // Simple animation
     setTimeout(() => {
       const result = Math.floor(Math.random() * 6) + 1;
-      setLastRoll(result);
       setRolling(false);
       onRoll(result);
     }, 500);
@@ -46,14 +36,8 @@ export default function DiceRoller({ onRoll, disabled = false, reset = false }: 
           text-white
         `}
       >
-        {rolling ? '🎲' : lastRoll || '🎲'}
+        🎲
       </button>
-
-      {lastRoll && !rolling && (
-        <p className="mt-4 text-lg font-semibold text-green-600">
-          You rolled: {lastRoll}
-        </p>
-      )}
     </div>
   );
 }
