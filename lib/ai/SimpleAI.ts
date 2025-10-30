@@ -65,7 +65,7 @@ export class SimpleAI {
       this.decideToBuyProperty(game, player, property);
     } else if (property.ownerId !== player.id) {
       console.log(`[AI ${player.name}] pagando aluguel em ${property.name}`);
-      //game.payRent(player, property, rollAmount);
+      game.payRent(player.id, property.id);
     }
   }
 
@@ -75,11 +75,15 @@ export class SimpleAI {
     property: Property
   ): void {
     if (AIDecisions.shouldBuyProperty(player, property, this.strategy)) {
-      console.log(`[AI ${player.name}] decidiu comprar ${property.name}`);
-      //game.buyProperty(player.id, property.id);
+      console.log(`[AI ${player.name}] decidiu comprar ${property.name} por $${property.price}`);
+      const success = game.buyProperty(player.id, property.id);
+      if (success) {
+        console.log(`[AI ${player.name}] comprou ${property.name}!`);
+      } else {
+        console.log(`[AI ${player.name}] falhou ao comprar ${property.name}`);
+      }
     } else {
       console.log(`[AI ${player.name}] decidiu NÃO comprar ${property.name}`);
-      //game.startAuction(property);
     }
   }
 }

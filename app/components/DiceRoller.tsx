@@ -1,13 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface DiceRollerProps {
   onRoll: (result: number) => void;
   disabled?: boolean;
+  reset?: boolean;
 }
 
-export default function DiceRoller({ onRoll, disabled = false }: DiceRollerProps) {
+export default function DiceRoller({ onRoll, disabled = false, reset = false }: DiceRollerProps) {
   const [rolling, setRolling] = useState(false);
   const [lastRoll, setLastRoll] = useState<number | null>(null);
+
+  // Reset the dice display when reset prop changes
+  useEffect(() => {
+    if (reset) {
+      setLastRoll(null);
+    }
+  }, [reset]);
 
   const handleRoll = () => {
     if (rolling || disabled) return;

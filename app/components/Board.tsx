@@ -68,7 +68,7 @@ export default function Board({ gameState }: BoardProps) {
       {/* Top Row (20-30) */}
       <div className="flex gap-0">
         {topTiles.map((tile) => (
-          <Tile key={tile.pos} tile={tile} players={gameState.players} />
+          <Tile key={tile.pos} tile={tile} players={gameState.players} gameState={gameState} />
         ))}
       </div>
 
@@ -77,7 +77,7 @@ export default function Board({ gameState }: BoardProps) {
         {/* Left Column (31-39) - NO corner */}
         <div className="flex flex-col gap-0">
           {leftTiles.map((tile) => (
-            <Tile key={tile.pos} tile={tile} players={gameState.players} />
+            <Tile key={tile.pos} tile={tile} players={gameState.players} gameState={gameState} />
           ))}
         </div>
 
@@ -94,7 +94,7 @@ export default function Board({ gameState }: BoardProps) {
         {/* Right Column (11-19) - NO corner */}
         <div className="flex flex-col gap-0">
           {rightTiles.map((tile) => (
-            <Tile key={tile.pos} tile={tile} players={gameState.players} />
+            <Tile key={tile.pos} tile={tile} players={gameState.players} gameState={gameState} />
           ))}
         </div>
       </div>
@@ -102,7 +102,7 @@ export default function Board({ gameState }: BoardProps) {
       {/* Bottom Row (0-10) */}
       <div className="flex gap-0">
         {bottomTiles.map((tile) => (
-          <Tile key={tile.pos} tile={tile} players={gameState.players} />
+          <Tile key={tile.pos} tile={tile} players={gameState.players} gameState={gameState} />
         ))}
       </div>
     </div>
@@ -110,8 +110,11 @@ export default function Board({ gameState }: BoardProps) {
 }
 
 // Individual Tile Component
-function Tile({ tile, players }: { tile: typeof BOARD_TILES[0]; players: any[] }) {
+function Tile({ tile, players, gameState }: { tile: typeof BOARD_TILES[0]; players: any[]; gameState: GameState }) {
   const playersOnTile = players.filter(p => p.position === tile.pos);
+  
+  // Find owner of this property
+  const owner = gameState.players.find(p => p.properties.includes(tile.pos));
   
   // Determine tile type
   const isCorner = [0, 10, 20, 30].includes(tile.pos);
@@ -133,17 +136,38 @@ function Tile({ tile, players }: { tile: typeof BOARD_TILES[0]; players: any[] }
   const textColor = 'text-gray-800';
   const textSize = isCorner ? 'text-[10px]' : 'text-[8px]';
   
-  // Get player color
-  const getPlayerColor = (idx: number) => {
-    if (idx === 0) return 'bg-blue-500';
-    if (idx === 1) return 'bg-red-500';
-    if (idx === 2) return 'bg-green-500';
+  // Get player color based on their actual index in game
+  const getPlayerColor = (player: any) => {
+    const playerIndex = players.indexOf(player);
+    if (playerIndex === 0) return 'bg-blue-500';
+    if (playerIndex === 1) return 'bg-red-500';
+    if (playerIndex === 2) return 'bg-green-500';
     return 'bg-yellow-500';
+  };
+  
+  // Get owner color
+  const getOwnerColor = () => {
+    if (!owner) return '';
+    const playerIndex = players.indexOf(owner);
+    if (playerIndex === 0) return 'border-blue-500 bg-blue-500/10';
+    if (playerIndex === 1) return 'border-red-500 bg-red-500/10';
+    if (playerIndex === 2) return 'border-green-500 bg-green-500/10';
+    return 'border-yellow-500 bg-yellow-500/10';
+  };
+  
+  // Get owner initial color
+  const getOwnerInitialColor = () => {
+    if (!owner) return '#000';
+    const playerIndex = players.indexOf(owner);
+    if (playerIndex === 0) return '#3b82f6';
+    if (playerIndex === 1) return '#ef4444';
+    if (playerIndex === 2) return '#22c55e';
+    return '#eab308';
   };
   
   return (
     <div
-      className={`w-14 h-14 border border-gray-300 ${bgColor} flex flex-col justify-between p-1 relative rounded-sm shadow-sm transition-all hover:shadow-md`}
+      className={`w-14 h-14 border-2 ${owner ? getOwnerColor() : 'border-gray-300'} ${bgColor} flex flex-col justify-between p-1 relative rounded-sm shadow-sm transition-all hover:shadow-md`}
       style={{ 
         borderTopColor: tile.color, 
         borderTopWidth: '10px',
@@ -157,16 +181,26 @@ function Tile({ tile, players }: { tile: typeof BOARD_TILES[0]; players: any[] }
         </div>
       )}
       
+      {/* Owner indicator */}
+      {owner && !isCorner && (
+        <div 
+          className="absolute top-0.5 left-0.5 text-[6px] font-bold bg-white/90 px-1 rounded-sm shadow-sm" 
+          style={{ color: getOwnerInitialColor() }}
+        >
+          {owner.name.charAt(0)}
+        </div>
+      )}
+      
       <span className={`${textSize} font-bold text-center leading-tight ${textColor} drop-shadow-sm relative z-10`}>
         {tile.name}
       </span>
       
       {/* Players on this tile */}
       <div className="flex gap-0.5 flex-wrap justify-center mt-auto">
-        {playersOnTile.map((player, idx) => (
+        {playersOnTile.map((player) => (
           <div
             key={player.id}
-            className={`w-2.5 h-2.5 rounded-full border-2 border-white shadow-md ${getPlayerColor(idx)}`}
+            className={`w-2.5 h-2.5 rounded-full border-2 border-white shadow-md ${getPlayerColor(player)} player-piece`}
             title={player.name}
           />
         ))}
