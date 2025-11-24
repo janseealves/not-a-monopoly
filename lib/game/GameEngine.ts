@@ -1,7 +1,7 @@
 import { Player } from "./Player";
 import Board from "./Board";
-import { STARTING_MONEY, PASS_GO_AMOUNT } from "../constants";
-import { GameState, MoveResult, DiceRoll } from "../types";
+import { STARTING_MONEY, PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT } from "../constants";
+import { GameState, MoveResult, DiceRoll, BoardTile, TileType } from "../types";
 
 export class GameEngine {
   players: Player[];
@@ -80,6 +80,35 @@ export class GameEngine {
       tile,
       passedGo,
     };
+  }
+
+  applyTax(player: Player, tile: BoardTile, payTenPercent?: boolean): number {
+    if (tile.type !== TileType.TAX) return 0;
+
+    let taxAmount = 0;
+
+    if (tile.name === "Income Tax") {
+      // Income Tax: player chooses 10% of total worth OR $200
+      const totalWorth = player.money + player.properties.reduce((sum, propId) => {
+        const prop = this.board.getProperty(propId);
+        return sum + (prop?.price ?? 0);
+      }, 0);
+
+      const tenPercentAmount = Math.floor(totalWorth * INCOME_TAX_PERCENT);
+      const fixedAmount = 200;
+
+      // payTenPercent parameter indicates player's choice
+      taxAmount = payTenPercent ? tenPercentAmount : fixedAmount;
+
+      console.log(`💸 ${player.name} paid Income Tax: $${taxAmount} (chose ${payTenPercent ? '10%' : '$200'})`);
+    } else if (tile.name === "Luxury Tax") {
+      // Luxury Tax: fixed $75
+      taxAmount = LUXURY_TAX_AMOUNT;
+      console.log(`💸 ${player.name} paid Luxury Tax: $${taxAmount}`);
+    }
+
+    player.deductMoney(taxAmount, { allowNegative: true });
+    return taxAmount;
   }
 
   buyProperty(playerId: string, propertyId: number): boolean {

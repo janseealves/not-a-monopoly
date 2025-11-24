@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { GameEngine } from '@/lib/game';
 import { AIDecisions, AIStrategy } from '@/lib/ai/AIDecisions';
 import { Board, DiceRoller, GameControls, PlayerList, GameStatus } from './components';
-import { DiceRoll } from '@/lib/types';
-import { PASS_GO_AMOUNT } from '@/lib/constants';
+import { DiceRoll, TileType } from '@/lib/types';
+import { PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT } from '@/lib/constants';
 
 export default function Home() {
   const [game, setGame] = useState<GameEngine | null>(null);
@@ -16,6 +16,8 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastRoll, setLastRoll] = useState<DiceRoll | null>(null);
   const [lastRentTransaction, setLastRentTransaction] = useState<{ amount: number; paidTo?: string; receivedFrom?: string } | null>(null);
+  const [showIncomeTaxChoice, setShowIncomeTaxChoice] = useState(false);
+  const [incomeTaxOptions, setIncomeTaxOptions] = useState<{ tenPercent: number; fixed: number } | null>(null);
 
   // Initialize game on mount
   useEffect(() => {
@@ -94,6 +96,37 @@ export default function Home() {
       console.log(`💰 ${currentPlayer.name} passed GO and collected $${PASS_GO_AMOUNT}!`);
     }
 
+    // Check if landed on TAX tile
+    if (finalTile.type === TileType.TAX) {
+      if (finalTile.name === "Luxury Tax") {
+        // Luxury Tax: automatic $75
+        const taxAmount = game.applyTax(currentPlayer, finalTile);
+        setLogs(prev => [...prev, `${currentPlayer.name} paid Luxury Tax: $${taxAmount}`]);
+        setMessage(`💸 You paid Luxury Tax: $${taxAmount}`);
+        forceUpdate();
+
+        if (result.isDouble) {
+          setHasRolled(false); // Allow rolling again
+        }
+        return;
+      } else if (finalTile.name === "Income Tax") {
+        // Income Tax: show choice UI
+        const totalWorth = currentPlayer.money + currentPlayer.properties.reduce((sum, propId) => {
+          const prop = game.board.getProperty(propId);
+          return sum + (prop?.price ?? 0);
+        }, 0);
+        const tenPercent = Math.floor(totalWorth * INCOME_TAX_PERCENT);
+        const fixed = 200;
+
+        setIncomeTaxOptions({ tenPercent, fixed });
+        setShowIncomeTaxChoice(true);
+        setMessage(`💸 Income Tax: Choose to pay 10% ($${tenPercent}) or $200`);
+        setLogs(prev => [...prev, `${currentPlayer.name} landed on Income Tax`]);
+        forceUpdate();
+        return;
+      }
+    }
+
     // Check if can buy property or pay rent
     let logMsg = `${currentPlayer.name} rolled ${result.total}${doublesMsg}`;
     if (passedGo) {
@@ -139,6 +172,28 @@ export default function Home() {
     }
 
     forceUpdate();
+  };
+
+  const handleIncomeTaxChoice = (payTenPercent: boolean) => {
+    if (!game || !incomeTaxOptions) return;
+
+    const currentPlayer = game.getCurrentPlayer();
+    if (!currentPlayer) return;
+
+    const currentTile = game.board.tiles[currentPlayer.position];
+    const taxAmount = game.applyTax(currentPlayer, currentTile, payTenPercent);
+
+    setLogs(prev => [...prev, `${currentPlayer.name} paid Income Tax: $${taxAmount} (chose ${payTenPercent ? '10%' : '$200'})`]);
+    setMessage(`💸 You paid Income Tax: $${taxAmount}`);
+    setShowIncomeTaxChoice(false);
+    setIncomeTaxOptions(null);
+    forceUpdate();
+
+    // If had doubles, allow rolling again
+    if (lastRoll?.isDouble) {
+      setHasRolled(false);
+      setMessage(`💸 Paid $${taxAmount}. Roll again!`);
+    }
   };
 
   const handleBuyProperty = () => {
@@ -254,6 +309,31 @@ export default function Home() {
         forceUpdate();
 
         await new Promise(resolve => setTimeout(resolve, 400));
+
+        // Check if landed on TAX tile
+        if (finalTile.type === TileType.TAX) {
+          let taxAmount = 0;
+          if (finalTile.name === "Luxury Tax") {
+            taxAmount = game.applyTax(currentAI, finalTile);
+            setLogs(prev => [...prev, `${currentAI.name} paid Luxury Tax: $${taxAmount}`]);
+            setMessage(`${currentAI.name} paid Luxury Tax: $${taxAmount}`);
+          } else if (finalTile.name === "Income Tax") {
+            // AI chooses whichever is cheaper
+            const totalWorth = currentAI.money + currentAI.properties.reduce((sum, propId) => {
+              const prop = game.board.getProperty(propId);
+              return sum + (prop?.price ?? 0);
+            }, 0);
+            const tenPercent = Math.floor(totalWorth * INCOME_TAX_PERCENT);
+            const fixed = 200;
+            const payTenPercent = tenPercent < fixed;
+
+            taxAmount = game.applyTax(currentAI, finalTile, payTenPercent);
+            setLogs(prev => [...prev, `${currentAI.name} paid Income Tax: $${taxAmount} (chose ${payTenPercent ? '10%' : '$200'})`]);
+            setMessage(`${currentAI.name} paid Income Tax: $${taxAmount}`);
+          }
+          forceUpdate();
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
 
         // Process landing on tile
         if (finalTile.property) {
@@ -381,8 +461,8 @@ export default function Home() {
             {/* Rent transaction notification */}
             {lastRentTransaction && (
               <div className={`p-4 rounded-lg shadow-lg text-center text-white ${
-                lastRentTransaction.paidTo 
-                  ? 'bg-gradient-to-r from-red-500 to-orange-500' 
+                lastRentTransaction.paidTo
+                  ? 'bg-gradient-to-r from-red-500 to-orange-500'
                   : 'bg-gradient-to-r from-green-500 to-emerald-500'
               }`}>
                 <div className="text-sm font-semibold mb-1">
@@ -395,7 +475,28 @@ export default function Home() {
                 </div>
               </div>
             )}
-            
+
+            {/* Income Tax Choice */}
+            {showIncomeTaxChoice && incomeTaxOptions && (
+              <div className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white p-4 rounded-lg shadow-lg">
+                <div className="text-sm font-semibold mb-3 text-center">💸 Income Tax</div>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleIncomeTaxChoice(true)}
+                    className="w-full bg-white text-orange-600 font-bold py-2 px-4 rounded hover:bg-gray-100 active:scale-95 transition-all"
+                  >
+                    Pay 10% (${incomeTaxOptions.tenPercent})
+                  </button>
+                  <button
+                    onClick={() => handleIncomeTaxChoice(false)}
+                    className="w-full bg-white text-orange-600 font-bold py-2 px-4 rounded hover:bg-gray-100 active:scale-95 transition-all"
+                  >
+                    Pay $200
+                  </button>
+                </div>
+              </div>
+            )}
+
             <DiceRoller 
               onRoll={handleRoll} 
               disabled={!humanTurn || hasRolled || isProcessing}
