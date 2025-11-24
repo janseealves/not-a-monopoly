@@ -190,8 +190,20 @@ export default function Home() {
     } else if (finalTile.property?.ownerId && finalTile.property.ownerId !== currentPlayer.id) {
       // Pay rent to owner
       const owner = game.players.find(p => p.id === finalTile.property!.ownerId);
-      const rentAmount = finalTile.property.rent;
-      const success = game.payRent(currentPlayer.id, finalTile.property.id);
+
+      // Calculate rent before paying (for utilities, it's calculated in payRent)
+      let rentAmount = finalTile.property.rent;
+      if (finalTile.property.color === "utility") {
+        // Calculate utility rent to display
+        const ownerUtilities = owner?.properties.filter(propId => {
+          const prop = game.board.getProperty(propId);
+          return prop?.color === "utility";
+        }).length || 0;
+        const multiplier = ownerUtilities === 2 ? 10 : 4;
+        rentAmount = result.total * multiplier;
+      }
+
+      const success = game.payRent(currentPlayer.id, finalTile.property.id, result.total);
 
       if (success) {
         logMsg += ` - Paid $${rentAmount} rent to ${owner?.name}`;
@@ -456,15 +468,27 @@ export default function Home() {
           } else if (property.ownerId !== currentAI.id) {
             // Pay rent
             const owner = game.players.find(p => p.id === property.ownerId);
-            const success = game.payRent(currentAI.id, property.id);
+
+            // Calculate rent (for utilities)
+            let rentAmount = property.rent;
+            if (property.color === "utility") {
+              const ownerUtilities = owner?.properties.filter(propId => {
+                const prop = game.board.getProperty(propId);
+                return prop?.color === "utility";
+              }).length || 0;
+              const multiplier = ownerUtilities === 2 ? 10 : 4;
+              rentAmount = roll.total * multiplier;
+            }
+
+            const success = game.payRent(currentAI.id, property.id, roll.total);
             if (success) {
-              console.log(`[AI TURN] ${currentAI.name} paid rent to ${owner?.name}`);
-              setLogs(prev => [...prev, `${currentAI.name} paid $${property.rent} rent to ${owner?.name}`]);
-              setMessage(`💸 ${currentAI.name} paid $${property.rent} rent to ${owner?.name}`);
+              console.log(`[AI TURN] ${currentAI.name} paid $${rentAmount} rent to ${owner?.name}`);
+              setLogs(prev => [...prev, `${currentAI.name} paid $${rentAmount} rent to ${owner?.name}`]);
+              setMessage(`💸 ${currentAI.name} paid $${rentAmount} rent to ${owner?.name}`);
 
               // Check if human player received rent
               if (property.ownerId === '1') { // Human player is ID '1'
-                setLastRentTransaction({ amount: property.rent, receivedFrom: currentAI.name });
+                setLastRentTransaction({ amount: rentAmount, receivedFrom: currentAI.name });
               }
 
               forceUpdate();

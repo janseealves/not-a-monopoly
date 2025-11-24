@@ -165,7 +165,7 @@ export class GameEngine {
     return true;
   }
 
-  payRent(payerId: string, propertyId: number): boolean {
+  payRent(payerId: string, propertyId: number, diceTotal?: number): boolean {
     const payer = this.players.find((p) => p.id === payerId);
     const property = this.board.getProperty(propertyId);
 
@@ -175,7 +175,21 @@ export class GameEngine {
     const owner = this.players.find((p) => p.id === property.ownerId);
     if (!owner) return false;
 
-    const rent = property.rent;
+    let rent = property.rent;
+
+    // Calculate utility rent based on dice roll
+    if (property.color === "utility" && diceTotal) {
+      // Count how many utilities the owner has
+      const ownerUtilities = owner.properties.filter(propId => {
+        const prop = this.board.getProperty(propId);
+        return prop?.color === "utility";
+      }).length;
+
+      // 1 utility: 4x dice roll, 2 utilities: 10x dice roll
+      const multiplier = ownerUtilities === 2 ? 10 : 4;
+      rent = diceTotal * multiplier;
+      console.log(`💸 Utility rent: ${diceTotal} × ${multiplier} = $${rent} (owner has ${ownerUtilities} utilities)`);
+    }
 
     // Allow negative for rent (bankruptcy handling can come later)
     const success = payer.deductMoney(rent, { allowNegative: true });
