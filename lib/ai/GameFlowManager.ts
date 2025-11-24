@@ -1,5 +1,5 @@
 import { GameEngine } from "../game";
-import { Player } from "../types"; 
+import { Player, GameEventType } from "../types";
 import { SimpleAI } from "./SimpleAI";
 import { MediumAI } from "./MediumAI"; 
 
@@ -14,6 +14,7 @@ export class GameFlowManager {
   private playerConfigs: PlayerConfig[];
   public isHumanTurn: boolean = false;
   private isGameRunning: boolean = true;
+  private eventListeners: Map<string, ((data: any) => void)[]> = new Map();
 
   constructor(gameEngine: GameEngine, aiCount: number = 1) {
     this.game = gameEngine;
@@ -29,6 +30,61 @@ export class GameFlowManager {
     });
 
     this.updateTurnStatus();
+    this.setupGameEngineListeners();
+  }
+
+  public addEventListener(event: string, callback: (data: any) => void): void {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, []);
+    }
+    this.eventListeners.get(event)!.push(callback);
+  }
+
+  public removeEventListener(event: string, callback: (data: any) => void): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      const index = listeners.indexOf(callback);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    }
+  }
+
+  private emit(event: string, data: any): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      listeners.forEach(callback => callback(data));
+    }
+  }
+
+  private setupGameEngineListeners(): void {
+    this.game.addEventListener('playerMoved', (data) => {
+      this.emit('turnAction', { type: 'playerMoved', ...data });
+    });
+
+    this.game.addEventListener('propertyBought', (data) => {
+      this.emit('turnAction', { type: 'propertyBought', ...data });
+    });
+
+    this.game.addEventListener('rentPaid', (data) => {
+      this.emit('turnAction', { type: 'rentPaid', ...data });
+    });
+
+    this.game.addEventListener('playerJailed', (data) => {
+      this.emit('turnAction', { type: 'playerJailed', ...data });
+    });
+
+    this.game.addEventListener('bailPaid', (data) => {
+      this.emit('turnAction', { type: 'bailPaid', ...data });
+    });
+
+    this.game.addEventListener('playerReleased', (data) => {
+      this.emit('turnAction', { type: 'playerReleased', ...data });
+    });
+
+    this.game.addEventListener('passGo', (data) => {
+      this.emit('turnAction', { type: 'passGo', ...data });
+    });
   }
 
   private updateTurnStatus(): void {
