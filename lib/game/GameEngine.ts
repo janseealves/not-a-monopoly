@@ -1,13 +1,14 @@
 import { Player } from "./Player";
 import Board from "./Board";
 import { STARTING_MONEY } from "../constants";
-import { GameState, MoveResult } from "../types";
+import { GameState, MoveResult, GameEventType } from "../types";
 
 export class GameEngine {
   players: Player[];
   board: Board;
   currentPlayerIndex: number;
   round: number;
+  private eventListeners: Map<GameEventType, ((data: any) => void)[]> = new Map();
 
   constructor(playerNames: string[] = []) {
     this.players = playerNames.map((n, i) => new Player(String(i + 1), n, STARTING_MONEY));
@@ -22,6 +23,30 @@ export class GameEngine {
       currentPlayerIndex: this.currentPlayerIndex,
       round: this.round,
     };
+  }
+
+  addEventListener(event: GameEventType, callback: (data: any) => void): void {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, []);
+    }
+    this.eventListeners.get(event)!.push(callback);
+  }
+
+  removeEventListener(event: GameEventType, callback: (data: any) => void): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      const index = listeners.indexOf(callback);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    }
+  }
+
+  private emit(event: GameEventType, data: any): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      listeners.forEach(callback => callback(data));
+    }
   }
 
   rollDice(): number {
@@ -44,12 +69,21 @@ export class GameEngine {
     player.move(steps, this.board.tiles.length);
     const to = player.position;
     const tile = this.board.getTile(to);
-    return {
+
+    const moveResult = {
       playerId: player.id,
       from,
       to,
       tile,
     };
+
+    this.emit('playerMoved', moveResult);
+
+    if (from > to && to !== 0) {
+      this.emit('passGo', { playerId: player.id });
+    }
+
+    return moveResult;
   }
 
   buyProperty(playerId: string, propertyId: number): boolean {
@@ -64,6 +98,14 @@ export class GameEngine {
     player.deductMoney(property.price);
     player.addProperty(propertyId);
     this.board.setPropertyOwner(propertyId, playerId);
+
+    this.emit('propertyBought', {
+      playerId,
+      propertyId,
+      propertyName: property.name,
+      price: property.price,
+      playerMoney: player.money
+    });
 
     return true;
   }
@@ -82,6 +124,16 @@ export class GameEngine {
 
     payer.deductMoney(rent);
     owner.addMoney(rent);
+
+    this.emit('rentPaid', {
+      payerId,
+      ownerId: property.ownerId,
+      propertyId,
+      propertyName: property.name,
+      rentAmount: rent,
+      payerMoney: payer.money,
+      ownerMoney: owner.money
+    });
 
     return true;
   }

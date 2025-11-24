@@ -49,3 +49,18 @@ export interface MoveResult {
   to: number;
   tile: BoardTile;
 }
+
+export interface GameEvent {
+  type: string;
+  data: any;
+}
+
+export type GameEventType =
+  | 'playerMoved'
+  | 'rentPaid'
+  | 'propertyBought'
+  | 'playerJailed'
+  | 'turnStarted'
+  | 'turnEnded'
+  | 'playerBankrupt'
+  | 'passGo';
