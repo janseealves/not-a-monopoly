@@ -64,3 +64,10 @@ export type GameEventType =
   | 'turnEnded'
   | 'playerBankrupt'
   | 'passGo';
+
+export interface DiceRoll {
+  d1: number;
+  d2: number;
+  total: number;
+  isDouble: boolean;
+}

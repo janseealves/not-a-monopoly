@@ -1,13 +1,14 @@
 import { Player } from "./Player";
 import Board from "./Board";
 import { STARTING_MONEY } from "../constants";
-import { GameState, MoveResult, GameEventType } from "../types";
+import { GameState, MoveResult, GameEventType, DiceRoll } from "../types";
 
 export class GameEngine {
   players: Player[];
   board: Board;
   currentPlayerIndex: number;
   round: number;
+  private doubleRollCount: number = 0;
   private eventListeners: Map<GameEventType, ((data: any) => void)[]> = new Map();
 
   constructor(playerNames: string[] = []) {
@@ -49,8 +50,13 @@ export class GameEngine {
     }
   }
 
-  rollDice(): number {
-    return Math.floor(Math.random() * 6) + 1;
+  rollDice(): DiceRoll {
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    const total = d1 + d2;
+    const isDouble = d1 === d2;
+
+    return { d1, d2, total, isDouble };
   }
 
   getCurrentPlayer(): Player | null {
@@ -58,8 +64,50 @@ export class GameEngine {
   }
 
   nextTurn(): void {
+    this.doubleRollCount = 0;
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     if (this.currentPlayerIndex === 0) this.round += 1;
+  }
+
+  processDoubleRoll(): boolean {
+    this.doubleRollCount++;
+
+    if (this.doubleRollCount >= 3) {
+      const player = this.getCurrentPlayer();
+      if (player) {
+        this.sendToJail(player.id);
+        this.emit('playerJailed', { playerId: player.id, reason: 'three_doubles' });
+      }
+      this.doubleRollCount = 0;
+      return false;
+    }
+
+    return true;
+  }
+
+  sendToJail(playerId: string): void {
+    const player = this.players.find(p => p.id === playerId);
+    if (player) {
+      player.inJail = true;
+      player.position = 10;
+    }
+  }
+
+  rollAndMove(): { diceRoll: DiceRoll; moveResult: MoveResult | null; continuesTurn: boolean } {
+    const diceRoll = this.rollDice();
+    let continuesTurn = false;
+
+    if (diceRoll.isDouble) {
+      continuesTurn = this.processDoubleRoll();
+      if (!continuesTurn) {
+        return { diceRoll, moveResult: null, continuesTurn: false };
+      }
+    } else {
+      this.doubleRollCount = 0;
+    }
+
+    const moveResult = this.moveCurrentPlayer(diceRoll.total);
+    return { diceRoll, moveResult, continuesTurn: diceRoll.isDouble };
   }
 
   moveCurrentPlayer(steps: number): MoveResult | null {
