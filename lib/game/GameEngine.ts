@@ -89,9 +89,14 @@ export class GameEngine {
     const property = this.board.getProperty(propertyId);
     if (!property || property.ownerId !== null) return false;
 
-    if (player.money < property.price) return false;
+    if (!player.canAfford(property.price)) {
+      console.log(`${player.name} cannot afford ${property.name} ($${property.price})`);
+      return false;
+    }
 
-    player.deductMoney(property.price);
+    const success = player.deductMoney(property.price);
+    if (!success) return false;
+
     player.addProperty(propertyId);
     this.board.setPropertyOwner(propertyId, playerId);
 
@@ -110,10 +115,13 @@ export class GameEngine {
 
     const rent = property.rent;
 
-    payer.deductMoney(rent);
-    owner.addMoney(rent);
+    // Allow negative for rent (bankruptcy handling can come later)
+    const success = payer.deductMoney(rent, { allowNegative: true });
+    if (success) {
+      owner.addMoney(rent);
+    }
 
-    return true;
+    return success;
   }
 }
 

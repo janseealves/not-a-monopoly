@@ -25,7 +25,18 @@ export class Player implements IPlayer {
     this.money += amount;
   }
 
-  deductMoney(amount: number): boolean {
+  canAfford(amount: number): boolean {
+    return this.money >= amount;
+  }
+
+  deductMoney(amount: number, options?: { allowNegative?: boolean }): boolean {
+    const allowNegative = options?.allowNegative ?? false;
+
+    if (!allowNegative && this.money < amount) {
+      console.warn(`${this.name} cannot afford $${amount} (has $${this.money})`);
+      return false;
+    }
+
     this.money -= amount;
     return true;
   }
