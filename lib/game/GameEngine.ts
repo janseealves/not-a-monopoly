@@ -1,7 +1,7 @@
 import { Player } from "./Player";
 import Board from "./Board";
 import { STARTING_MONEY } from "../constants";
-import { GameState, MoveResult } from "../types";
+import { GameState, MoveResult, DiceRoll } from "../types";
 
 export class GameEngine {
   players: Player[];
@@ -24,8 +24,12 @@ export class GameEngine {
     };
   }
 
-  rollDice(): number {
-    return Math.floor(Math.random() * 6) + 1;
+  rollDice(): DiceRoll {
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    const total = d1 + d2;
+    const isDouble = d1 === d2;
+    return { d1, d2, total, isDouble };
   }
 
   getCurrentPlayer(): Player | null {
@@ -33,8 +37,25 @@ export class GameEngine {
   }
 
   nextTurn(): void {
+    // Reset consecutive doubles count when changing player
+    const currentPlayer = this.getCurrentPlayer();
+    if (currentPlayer) {
+      currentPlayer.consecutiveDoublesCount = 0;
+    }
+
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     if (this.currentPlayerIndex === 0) this.round += 1;
+  }
+
+  sendToJail(playerId: string): void {
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player) return;
+
+    console.log(`🚔 ${player.name} foi para a prisão!`);
+    player.position = 10; // JAIL position
+    player.inJail = true;
+    player.jailTurns = 0;
+    player.consecutiveDoublesCount = 0;
   }
 
   moveCurrentPlayer(steps: number): MoveResult | null {

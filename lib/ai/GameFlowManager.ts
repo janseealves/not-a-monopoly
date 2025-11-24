@@ -81,8 +81,8 @@ export class GameFlowManager {
       case "ROLL_DICE":
         console.log(`[Flow] Jogador(a) ${player.name} rolou os dados.`);
         const roll = this.game.rollDice();
-        const moveResult = this.game.moveCurrentPlayer(roll);
-        console.log(`[Flow] Jogador(a) caiu em ${moveResult?.tile.name}`);
+        const moveResult = this.game.moveCurrentPlayer(roll.total);
+        console.log(`[Flow] Jogador(a) rolou ${roll.d1} + ${roll.d2} = ${roll.total} e caiu em ${moveResult?.tile.name}`);
         break;
 
       case "END_TURN":

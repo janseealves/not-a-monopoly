@@ -7,6 +7,8 @@ export class Player implements IPlayer {
   position: number;
   properties: number[];
   inJail: boolean;
+  jailTurns: number;
+  consecutiveDoublesCount: number;
 
   constructor(id: string, name: string, startingMoney: number) {
     this.id = id;
@@ -15,6 +17,8 @@ export class Player implements IPlayer {
     this.position = 0;
     this.properties = [];
     this.inJail = false;
+    this.jailTurns = 0;
+    this.consecutiveDoublesCount = 0;
   }
 
   addMoney(amount: number): void {
