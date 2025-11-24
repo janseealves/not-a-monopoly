@@ -1,7 +1,7 @@
 import { Player } from "./Player";
 import Board from "./Board";
 import { STARTING_MONEY } from "../constants";
-import { GameState, MoveResult, GameEventType, DiceRoll } from "../types";
+import { GameState, MoveResult, GameEventType, DiceRoll, TileType } from "../types";
 
 export class GameEngine {
   players: Player[];
@@ -90,11 +90,63 @@ export class GameEngine {
     if (player) {
       player.inJail = true;
       player.position = 10;
+      this.emit('playerJailed', { playerId, reason: 'sent_to_jail' });
     }
   }
 
-  rollAndMove(): { diceRoll: DiceRoll; moveResult: MoveResult | null; continuesTurn: boolean } {
+  payBail(playerId: string): boolean {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || !player.inJail || player.money < 50) {
+      return false;
+    }
+
+    player.deductMoney(50);
+    player.inJail = false;
+    this.emit('bailPaid', { playerId, amount: 50, playerMoney: player.money });
+    return true;
+  }
+
+  releaseFromJail(playerId: string): void {
+    const player = this.players.find(p => p.id === playerId);
+    if (player && player.inJail) {
+      player.inJail = false;
+      this.emit('playerReleased', { playerId, reason: 'doubles_rolled' });
+    }
+  }
+
+  attemptJailEscape(playerId: string): { escaped: boolean; diceRoll: DiceRoll } {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || !player.inJail) {
+      return { escaped: false, diceRoll: { d1: 0, d2: 0, total: 0, isDouble: false } };
+    }
+
     const diceRoll = this.rollDice();
+
+    if (diceRoll.isDouble) {
+      this.releaseFromJail(playerId);
+      const moveResult = this.moveCurrentPlayer(diceRoll.total);
+      return { escaped: true, diceRoll };
+    }
+
+    return { escaped: false, diceRoll };
+  }
+
+  rollAndMove(): { diceRoll: DiceRoll; moveResult: MoveResult | null; continuesTurn: boolean; jailStatus?: string } {
+    const player = this.getCurrentPlayer();
+    if (!player) return { diceRoll: { d1: 0, d2: 0, total: 0, isDouble: false }, moveResult: null, continuesTurn: false };
+
+    const diceRoll = this.rollDice();
+
+    if (player.inJail) {
+      if (diceRoll.isDouble) {
+        this.releaseFromJail(player.id);
+        const moveResult = this.moveCurrentPlayer(diceRoll.total);
+        return { diceRoll, moveResult, continuesTurn: false, jailStatus: 'escaped' };
+      } else {
+        return { diceRoll, moveResult: null, continuesTurn: false, jailStatus: 'still_in_jail' };
+      }
+    }
+
     let continuesTurn = false;
 
     if (diceRoll.isDouble) {
@@ -129,6 +181,10 @@ export class GameEngine {
 
     if (from > to && to !== 0) {
       this.emit('passGo', { playerId: player.id });
+    }
+
+    if (tile.type === TileType.GO_TO_JAIL) {
+      this.sendToJail(player.id);
     }
 
     return moveResult;

@@ -63,7 +63,9 @@ export type GameEventType =
   | 'turnStarted'
   | 'turnEnded'
   | 'playerBankrupt'
-  | 'passGo';
+  | 'passGo'
+  | 'bailPaid'
+  | 'playerReleased';
 
 export interface DiceRoll {
   d1: number;
