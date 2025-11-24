@@ -1,6 +1,6 @@
 import { Player } from "./Player";
 import Board from "./Board";
-import { STARTING_MONEY } from "../constants";
+import { STARTING_MONEY, PASS_GO_AMOUNT } from "../constants";
 import { GameState, MoveResult, DiceRoll } from "../types";
 
 export class GameEngine {
@@ -64,12 +64,21 @@ export class GameEngine {
     const from = player.position;
     player.move(steps, this.board.tiles.length);
     const to = player.position;
+
+    // Check if player passed GO (wrapped around the board)
+    const passedGo = from + steps >= this.board.tiles.length;
+    if (passedGo) {
+      player.addMoney(PASS_GO_AMOUNT);
+      console.log(`💰 ${player.name} passou por GO e recebeu $${PASS_GO_AMOUNT}!`);
+    }
+
     const tile = this.board.getTile(to);
     return {
       playerId: player.id,
       from,
       to,
       tile,
+      passedGo,
     };
   }
 

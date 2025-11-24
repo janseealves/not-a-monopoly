@@ -57,4 +57,5 @@ export interface MoveResult {
   from: number;
   to: number;
   tile: BoardTile;
+  passedGo?: boolean;
 }

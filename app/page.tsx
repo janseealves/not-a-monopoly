@@ -5,6 +5,7 @@ import { GameEngine } from '@/lib/game';
 import { AIDecisions, AIStrategy } from '@/lib/ai/AIDecisions';
 import { Board, DiceRoller, GameControls, PlayerList, GameStatus } from './components';
 import { DiceRoll } from '@/lib/types';
+import { PASS_GO_AMOUNT } from '@/lib/constants';
 
 export default function Home() {
   const [game, setGame] = useState<GameEngine | null>(null);
@@ -85,8 +86,20 @@ export default function Home() {
     const finalTile = game.board.tiles[currentPlayer.position];
     console.log('[ROLL] After:', currentPlayer.name, 'position:', currentPlayer.position);
 
+    // Check if passed GO during animation
+    const oldPos = (currentPlayer.position - result.total + 40) % 40;
+    const passedGo = oldPos + result.total >= 40;
+    if (passedGo) {
+      currentPlayer.addMoney(PASS_GO_AMOUNT);
+      console.log(`💰 ${currentPlayer.name} passed GO and collected $${PASS_GO_AMOUNT}!`);
+    }
+
     // Check if can buy property or pay rent
-    let logMsg = `${currentPlayer.name} rolled ${result.total}${doublesMsg} and moved to ${finalTile.name}`;
+    let logMsg = `${currentPlayer.name} rolled ${result.total}${doublesMsg}`;
+    if (passedGo) {
+      logMsg += ` and passed GO (+$${PASS_GO_AMOUNT})`;
+    }
+    logMsg += ` and moved to ${finalTile.name}`;
     if (finalTile.property && !finalTile.property.ownerId) {
       if (currentPlayer.money >= finalTile.property.price) {
         logMsg += ` - Available to buy for $${finalTile.property.price}!`;
@@ -218,13 +231,25 @@ export default function Home() {
         }
 
         // Animate AI movement
+        const aiOldPos = currentAI.position;
         await animateMove(currentAI, roll.total);
 
         const finalTile = game.board.tiles[currentAI.position];
 
+        // Check if AI passed GO
+        const aiPassedGo = aiOldPos + roll.total >= 40;
+        if (aiPassedGo) {
+          currentAI.addMoney(PASS_GO_AMOUNT);
+          console.log(`💰 ${currentAI.name} passed GO and collected $${PASS_GO_AMOUNT}!`);
+        }
+
         console.log(`[AI TURN] ${currentAI.name} rolled ${roll.total}, moved to position ${currentAI.position}`);
 
-        setLogs(prev => [...prev, `${currentAI.name} moved to ${finalTile.name}`]);
+        let aiMoveMsg = `${currentAI.name} moved to ${finalTile.name}`;
+        if (aiPassedGo) {
+          aiMoveMsg += ` (passed GO +$${PASS_GO_AMOUNT})`;
+        }
+        setLogs(prev => [...prev, aiMoveMsg]);
         setMessage(`${currentAI.name} is at ${finalTile.name}`);
         forceUpdate();
 
