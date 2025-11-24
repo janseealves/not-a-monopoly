@@ -6,4 +6,7 @@ export const TAX_ON_SIX = 200;
 export const INCOME_TAX_PERCENT = 0.1;
 export const LUXURY_TAX_AMOUNT = 75;
 
+export const BAIL_AMOUNT = 50;
+export const MAX_JAIL_TURNS = 3;
+
 export const DEFAULT_PROPERTY_RENT_MULTIPLIER = 1;

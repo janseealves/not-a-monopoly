@@ -5,7 +5,7 @@ import { GameEngine } from '@/lib/game';
 import { AIDecisions, AIStrategy } from '@/lib/ai/AIDecisions';
 import { Board, DiceRoller, GameControls, PlayerList, GameStatus } from './components';
 import { DiceRoll, TileType } from '@/lib/types';
-import { PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT } from '@/lib/constants';
+import { PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT, BAIL_AMOUNT } from '@/lib/constants';
 
 export default function Home() {
   const [game, setGame] = useState<GameEngine | null>(null);
@@ -62,7 +62,41 @@ export default function Home() {
     setLastRoll(result);
     setLastRentTransaction(null); // Clear previous rent notification
 
-    // Check doubles logic
+    // Handle jail logic
+    if (currentPlayer.inJail) {
+      currentPlayer.jailTurns++;
+      console.log(`[JAIL] ${currentPlayer.name} is in jail. Turn ${currentPlayer.jailTurns}/3`);
+
+      if (result.isDouble) {
+        // Rolled doubles - get out of jail!
+        game.releaseFromJail(currentPlayer.id);
+        setMessage(`🎲 ${currentPlayer.name} rolled doubles (${result.d1}, ${result.d2}) and got out of jail!`);
+        setLogs(prev => [...prev, `${currentPlayer.name} rolled doubles and escaped jail!`]);
+        setHasRolled(false); // Can roll again
+        forceUpdate();
+        return;
+      } else if (currentPlayer.jailTurns >= 3) {
+        // 3 turns in jail - must pay bail or stay
+        if (currentPlayer.canAfford(BAIL_AMOUNT)) {
+          game.payBail(currentPlayer.id);
+          setMessage(`${currentPlayer.name} served 3 turns and paid $${BAIL_AMOUNT} bail to get out!`);
+          setLogs(prev => [...prev, `${currentPlayer.name} paid bail after 3 turns`]);
+        } else {
+          setMessage(`${currentPlayer.name} can't afford bail! Still in jail.`);
+          setLogs(prev => [...prev, `${currentPlayer.name} can't afford bail (need $${BAIL_AMOUNT})`]);
+        }
+        forceUpdate();
+        return;
+      } else {
+        // Still in jail
+        setMessage(`${currentPlayer.name} rolled ${result.d1} + ${result.d2} (no doubles). Still in jail. (Turn ${currentPlayer.jailTurns}/3)`);
+        setLogs(prev => [...prev, `${currentPlayer.name} failed to roll doubles. Jail turn ${currentPlayer.jailTurns}/3`]);
+        forceUpdate();
+        return;
+      }
+    }
+
+    // Check doubles logic (for non-jailed players)
     if (result.isDouble) {
       currentPlayer.consecutiveDoublesCount++;
       console.log(`[DOUBLES] ${currentPlayer.name} rolled doubles! Count: ${currentPlayer.consecutiveDoublesCount}`);
@@ -94,6 +128,15 @@ export default function Home() {
     if (passedGo) {
       currentPlayer.addMoney(PASS_GO_AMOUNT);
       console.log(`💰 ${currentPlayer.name} passed GO and collected $${PASS_GO_AMOUNT}!`);
+    }
+
+    // Check if landed on GO_TO_JAIL tile
+    if (finalTile.type === TileType.GO_TO_JAIL) {
+      game.sendToJail(currentPlayer.id);
+      setMessage(`🚔 ${currentPlayer.name} landed on "Go To Jail"!`);
+      setLogs(prev => [...prev, `${currentPlayer.name} landed on Go To Jail`]);
+      forceUpdate();
+      return;
     }
 
     // Check if landed on TAX tile
@@ -171,6 +214,23 @@ export default function Home() {
       setHasRolled(false); // Allow rolling again
     }
 
+    forceUpdate();
+  };
+
+  const handlePayBail = () => {
+    if (!game) return;
+
+    const currentPlayer = game.getCurrentPlayer();
+    if (!currentPlayer || !currentPlayer.inJail) return;
+
+    const success = game.payBail(currentPlayer.id);
+    if (success) {
+      setLogs(prev => [...prev, `${currentPlayer.name} paid $${BAIL_AMOUNT} bail and got out of jail`]);
+      setMessage(`✅ You paid $${BAIL_AMOUNT} bail! You can now roll.`);
+      setHasRolled(false); // Allow rolling
+    } else {
+      setMessage(`❌ You don't have enough money for bail ($${BAIL_AMOUNT})`);
+    }
     forceUpdate();
   };
 
@@ -263,10 +323,42 @@ export default function Home() {
         const roll = game.rollDice();
         const doublesMsg = roll.isDouble ? ' (DOUBLES!)' : '';
         setLogs(prev => [...prev, `${currentAI.name} rolled ${roll.d1} + ${roll.d2} = ${roll.total}${doublesMsg}`]);
-        setMessage(`${currentAI.name} rolled ${roll.total}${doublesMsg}. Moving...`);
+        setMessage(`${currentAI.name} rolled ${roll.total}${doublesMsg}...`);
         forceUpdate();
 
-        // Check for doubles
+        // Handle jail logic for AI
+        if (currentAI.inJail) {
+          currentAI.jailTurns++;
+          console.log(`[AI JAIL] ${currentAI.name} is in jail. Turn ${currentAI.jailTurns}/3`);
+
+          if (roll.isDouble) {
+            // Rolled doubles - get out of jail!
+            game.releaseFromJail(currentAI.id);
+            setMessage(`${currentAI.name} rolled doubles and got out of jail!`);
+            setLogs(prev => [...prev, `${currentAI.name} rolled doubles and escaped jail!`]);
+            forceUpdate();
+            canRollAgain = true; // Can roll again after escaping
+            await new Promise(resolve => setTimeout(resolve, 400));
+            continue; // Skip to next iteration to actually move
+          } else if (currentAI.jailTurns >= 3) {
+            // 3 turns in jail - pay bail
+            game.payBail(currentAI.id);
+            setMessage(`${currentAI.name} paid $${BAIL_AMOUNT} bail after 3 turns`);
+            setLogs(prev => [...prev, `${currentAI.name} paid bail after 3 turns`]);
+            forceUpdate();
+            canRollAgain = false;
+            break; // End turn after paying bail
+          } else {
+            // Still in jail
+            setMessage(`${currentAI.name} failed to roll doubles. Jail turn ${currentAI.jailTurns}/3`);
+            setLogs(prev => [...prev, `${currentAI.name} failed to roll doubles. Jail turn ${currentAI.jailTurns}/3`]);
+            forceUpdate();
+            canRollAgain = false;
+            break; // End turn
+          }
+        }
+
+        // Check for doubles (non-jailed)
         if (roll.isDouble) {
           currentAI.consecutiveDoublesCount++;
           console.log(`[AI DOUBLES] ${currentAI.name} rolled doubles! Count: ${currentAI.consecutiveDoublesCount}`);
@@ -309,6 +401,16 @@ export default function Home() {
         forceUpdate();
 
         await new Promise(resolve => setTimeout(resolve, 400));
+
+        // Check if landed on GO_TO_JAIL tile
+        if (finalTile.type === TileType.GO_TO_JAIL) {
+          game.sendToJail(currentAI.id);
+          setMessage(`🚔 ${currentAI.name} landed on "Go To Jail"!`);
+          setLogs(prev => [...prev, `${currentAI.name} landed on Go To Jail`]);
+          forceUpdate();
+          canRollAgain = false;
+          break; // End turn
+        }
 
         // Check if landed on TAX tile
         if (finalTile.type === TileType.TAX) {
@@ -494,6 +596,27 @@ export default function Home() {
                     Pay $200
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Jail Status / Pay Bail */}
+            {currentPlayer && currentPlayer.inJail && humanTurn && (
+              <div className="bg-gradient-to-r from-gray-700 to-gray-900 text-white p-4 rounded-lg shadow-lg">
+                <div className="text-sm font-semibold mb-2 text-center">🚔 IN JAIL</div>
+                <div className="text-xs text-center mb-3">
+                  Turn {currentPlayer.jailTurns}/3 • Roll doubles or pay bail
+                </div>
+                <button
+                  onClick={handlePayBail}
+                  disabled={!currentPlayer.canAfford(BAIL_AMOUNT)}
+                  className={`w-full font-bold py-2 px-4 rounded transition-all ${
+                    currentPlayer.canAfford(BAIL_AMOUNT)
+                      ? 'bg-green-500 hover:bg-green-600 active:scale-95'
+                      : 'bg-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Pay ${BAIL_AMOUNT} Bail
+                </button>
               </div>
             )}
 

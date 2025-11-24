@@ -1,6 +1,6 @@
 import { Player } from "./Player";
 import Board from "./Board";
-import { STARTING_MONEY, PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT } from "../constants";
+import { STARTING_MONEY, PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT, BAIL_AMOUNT, MAX_JAIL_TURNS } from "../constants";
 import { GameState, MoveResult, DiceRoll, BoardTile, TileType } from "../types";
 
 export class GameEngine {
@@ -58,9 +58,42 @@ export class GameEngine {
     player.consecutiveDoublesCount = 0;
   }
 
+  releaseFromJail(playerId: string): void {
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player) return;
+
+    console.log(`🔓 ${player.name} saiu da prisão!`);
+    player.inJail = false;
+    player.jailTurns = 0;
+  }
+
+  payBail(playerId: string): boolean {
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player || !player.inJail) return false;
+
+    if (!player.canAfford(BAIL_AMOUNT)) {
+      console.log(`${player.name} não pode pagar a fiança ($${BAIL_AMOUNT})`);
+      return false;
+    }
+
+    const success = player.deductMoney(BAIL_AMOUNT);
+    if (success) {
+      this.releaseFromJail(playerId);
+      console.log(`${player.name} pagou $${BAIL_AMOUNT} de fiança e saiu da prisão!`);
+    }
+    return success;
+  }
+
   moveCurrentPlayer(steps: number): MoveResult | null {
     const player = this.getCurrentPlayer();
     if (!player) return null;
+
+    // Cannot move if in jail
+    if (player.inJail) {
+      console.log(`${player.name} is in jail and cannot move!`);
+      return null;
+    }
+
     const from = player.position;
     player.move(steps, this.board.tiles.length);
     const to = player.position;
