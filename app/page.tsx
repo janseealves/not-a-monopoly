@@ -20,6 +20,7 @@ export default function Home() {
   const [incomeTaxOptions, setIncomeTaxOptions] = useState<{ tenPercent: number; fixed: number } | null>(null);
   const [canBuyCurrentProperty, setCanBuyCurrentProperty] = useState(false);
   const [gameWinner, setGameWinner] = useState<string | null>(null);
+  const [showPropertyManagement, setShowPropertyManagement] = useState(false);
 
   // Initialize game on mount
   useEffect(() => {
@@ -308,6 +309,24 @@ export default function Home() {
       forceUpdate();
     } else {
       setMessage('Not enough money!');
+    }
+  };
+
+  const handleBuyHouse = (propertyId: number) => {
+    if (!game) return;
+    const success = game.buyHouse(game.getCurrentPlayer()?.id || '', propertyId);
+    if (success) {
+      setLogs(prev => [...prev, `Built house on property ${propertyId}`]);
+      setGameState(game.getGameState());
+    }
+  };
+
+  const handleBuyHotel = (propertyId: number) => {
+    if (!game) return;
+    const success = game.buyHotel(game.getCurrentPlayer()?.id || '', propertyId);
+    if (success) {
+      setLogs(prev => [...prev, `Built hotel on property ${propertyId}`]);
+      setGameState(game.getGameState());
     }
   };
 
@@ -698,6 +717,13 @@ export default function Home() {
               propertyPrice={buyableProperty?.price}
               propertyName={buyableProperty?.name}
             />
+            <button
+              onClick={() => setShowPropertyManagement(true)}
+              disabled={!humanTurn || isProcessing || !currentPlayer?.properties.length}
+              className="bg-purple-500 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-600 active:scale-95 transition-all w-full"
+            >
+              Manage Properties
+            </button>
           </div>
 
           {/* Center - Board */}
@@ -711,6 +737,176 @@ export default function Home() {
             <PlayerList players={gameState.players} currentPlayerIndex={gameState.currentPlayerIndex} />
           </div>
         </div>
+
+        {/* Property Management Modal */}
+        {showPropertyManagement && currentPlayer && (() => {
+          // Group properties by color for better organization
+          const groupPropertiesByColor = () => {
+            if (!currentPlayer) return {};
+
+            const groups: { [color: string]: any[] } = {};
+            currentPlayer.properties.forEach(propId => {
+              const property = game!.board.getProperty(propId);
+              if (!property) return;
+
+              const color = property.color || 'other';
+              if (!groups[color]) groups[color] = [];
+              groups[color].push(property);
+            });
+
+            return groups;
+          };
+
+          // Get monopoly status for a color
+          const getMonopolyStatus = (color: string): { hasMonopoly: boolean; owned: number; total: number } => {
+            const colorGroupSizes: { [key: string]: number } = {
+              'brown': 2, 'lightblue': 3, 'pink': 3, 'orange': 3,
+              'red': 3, 'yellow': 3, 'green': 3, 'darkblue': 2,
+              'railroad': 4, 'utility': 2
+            };
+
+            const total = colorGroupSizes[color] || 0;
+            const owned = currentPlayer?.properties.filter(propId => {
+              const prop = game!.board.getProperty(propId);
+              return prop?.color === color;
+            }).length || 0;
+
+            return {
+              hasMonopoly: owned === total && total > 0,
+              owned,
+              total
+            };
+          };
+
+          return (
+          <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none backdrop-blur-sm">
+            <div className="pointer-events-auto">
+            <div className="bg-white p-6 rounded-lg max-w-3xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">🏘️ Property Management</h3>
+                <button
+                  onClick={() => setShowPropertyManagement(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+
+              {currentPlayer && currentPlayer.properties.length === 0 && (
+                <p className="text-gray-500 text-center py-8">You don&apos;t own any properties yet.</p>
+              )}
+
+              {currentPlayer && currentPlayer.properties.length > 0 && (
+                <>
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>💡 Tip:</strong> You need a complete color monopoly to build houses.
+                      Own all properties in a color group to unlock building!
+                    </p>
+                  </div>
+
+                  {Object.entries(groupPropertiesByColor()).map(([color, properties]) => {
+                    const monopolyStatus = getMonopolyStatus(color);
+                    const colorDisplay = color === 'railroad' ? 'Railroads' :
+                                       color === 'utility' ? 'Utilities' :
+                                       color.charAt(0).toUpperCase() + color.slice(1);
+
+                    const colorClasses: { [key: string]: string } = {
+                      'brown': 'bg-amber-800',
+                      'lightblue': 'bg-sky-300',
+                      'pink': 'bg-pink-400',
+                      'orange': 'bg-orange-500',
+                      'red': 'bg-red-600',
+                      'yellow': 'bg-yellow-400',
+                      'green': 'bg-green-600',
+                      'darkblue': 'bg-blue-800',
+                      'railroad': 'bg-gray-800',
+                      'utility': 'bg-gray-400'
+                    };
+
+                    return (
+                      <div key={color} className="mb-6 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded ${colorClasses[color]} border-2 border-gray-300`}></div>
+                            <h4 className="font-bold text-lg">{colorDisplay}</h4>
+                            <span className="text-sm text-gray-600">
+                              ({monopolyStatus.owned}/{monopolyStatus.total})
+                            </span>
+                            {monopolyStatus.hasMonopoly && color !== 'railroad' && color !== 'utility' && (
+                              <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
+                                🎯 MONOPOLY
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {properties.map((property: any) => {
+                          const canBuyHouse = game!.canBuyHouse(currentPlayer!.id, property.id);
+                          const canBuyHotel = game!.canBuyHotel(currentPlayer!.id, property.id);
+
+                          return (
+                            <div key={property.id} className="ml-2 mb-2 p-3 bg-white border border-gray-200 rounded">
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <div className="font-semibold text-gray-800">{property.name}</div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Base Rent: ${property.rent}
+                                    {property.houses > 0 && ` | Current: 🏠 × ${property.houses}`}
+                                    {property.hotels > 0 && ` | Current: 🏨`}
+                                  </div>
+                                  {!monopolyStatus.hasMonopoly && color !== 'railroad' && color !== 'utility' && (
+                                    <div className="text-xs text-amber-600 mt-1">
+                                      ⚠️ Need {monopolyStatus.total - monopolyStatus.owned} more {colorDisplay} {monopolyStatus.total - monopolyStatus.owned === 1 ? 'property' : 'properties'} to build
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2 ml-4">
+                                  {canBuyHouse && (
+                                    <button
+                                      onClick={() => handleBuyHouse(property.id)}
+                                      className="bg-green-500 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-green-600 active:scale-95 transition-all whitespace-nowrap"
+                                    >
+                                      🏠 Build House (${property.houseCost})
+                                    </button>
+                                  )}
+                                  {canBuyHotel && (
+                                    <button
+                                      onClick={() => handleBuyHotel(property.id)}
+                                      className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700 active:scale-95 transition-all whitespace-nowrap"
+                                    >
+                                      🏨 Build Hotel (${property.hotelCost})
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {!monopolyStatus.hasMonopoly && color !== 'railroad' && color !== 'utility' && (
+                          <div className="ml-2 mt-2 text-xs text-gray-500 italic">
+                            Complete this color set to unlock building
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              <button
+                onClick={() => setShowPropertyManagement(false)}
+                className="w-full mt-4 bg-gray-600 text-white px-4 py-2 rounded font-medium hover:bg-gray-700 active:scale-95 transition-all"
+              >
+                Close
+              </button>
+            </div>
+            </div>
+          </div>
+          );
+        })()}
       </div>
     </div>
   );

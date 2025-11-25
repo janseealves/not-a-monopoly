@@ -10,3 +10,8 @@ export const BAIL_AMOUNT = 50;
 export const MAX_JAIL_TURNS = 3;
 
 export const DEFAULT_PROPERTY_RENT_MULTIPLIER = 1;
+
+export const MAX_HOUSES_PER_PROPERTY = 4;
+export const MAX_HOTELS_PER_PROPERTY = 1;
+export const TOTAL_HOUSES = 32;
+export const TOTAL_HOTELS = 12;

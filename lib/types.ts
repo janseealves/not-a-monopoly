@@ -26,6 +26,11 @@ export interface Property {
   rent: number;
   color?: string;
   ownerId: PlayerId | null;
+  houses: number;
+  hotels: number;
+  houseCost?: number;
+  hotelCost?: number;
+  rentWithHouses?: number[];
 }
 
 export interface BoardTile {
@@ -77,7 +82,9 @@ export type GameEventType =
   | 'passGo'
   | 'bailPaid'
   | 'playerReleased'
-  | 'gameWon';
+  | 'gameWon'
+  | 'houseBought'
+  | 'hotelBought';
 
 export interface DiceRoll {
   d1: number;

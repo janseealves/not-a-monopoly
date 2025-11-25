@@ -1,6 +1,6 @@
 import { Player } from "./Player";
 import Board from "./Board";
-import { STARTING_MONEY, PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT, BAIL_AMOUNT } from "../constants";
+import { STARTING_MONEY, PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT, BAIL_AMOUNT, MAX_HOUSES_PER_PROPERTY, MAX_HOTELS_PER_PROPERTY } from "../constants";
 import { GameState, MoveResult, GameEventType, DiceRoll, BoardTile, TileType } from "../types";
 
 export class GameEngine {
@@ -332,6 +332,107 @@ export class GameEngine {
     return this.players.filter(p => !p.isBankrupt);
   }
 
+  hasMonopoly(playerId: string, color: string): boolean {
+    const colorProperties = this.board.tiles
+      .filter(tile => tile.property?.color === color)
+      .map(tile => tile.property!);
+
+    return colorProperties.every(prop => prop.ownerId === playerId);
+  }
+
+  canBuyHouse(playerId: string, propertyId: number): boolean {
+    const player = this.players.find(p => p.id === playerId);
+    const property = this.board.getProperty(propertyId);
+
+    if (!player || !property) return false;
+    if (property.ownerId !== playerId) return false;
+    if (!property.color || property.color === 'railroad' || property.color === 'utility') return false;
+    if (property.hotels > 0) return false;
+    if (property.houses >= MAX_HOUSES_PER_PROPERTY) return false;
+
+    // Must have monopoly
+    if (!this.hasMonopoly(playerId, property.color)) return false;
+
+    // Must afford house cost
+    if (player.money < (property.houseCost || 0)) return false;
+
+    // Even building rule: can't build ahead of other properties in set
+    const colorProperties = this.board.tiles
+      .filter(tile => tile.property?.color === property.color && tile.property?.ownerId === playerId)
+      .map(tile => tile.property!);
+
+    const minHouses = Math.min(...colorProperties.map(p => p.houses));
+    if (property.houses > minHouses) return false;
+
+    return true;
+  }
+
+  buyHouse(playerId: string, propertyId: number): boolean {
+    if (!this.canBuyHouse(playerId, propertyId)) return false;
+
+    const player = this.players.find(p => p.id === playerId);
+    const property = this.board.getProperty(propertyId);
+
+    if (!player || !property || !property.houseCost) return false;
+
+    const success = player.deductMoney(property.houseCost);
+    if (!success) return false;
+
+    property.houses++;
+
+    console.log(`🏠 ${player.name} built house on ${property.name} (${property.houses} houses)`);
+
+    this.emit('houseBought', {
+      playerId,
+      propertyId,
+      propertyName: property.name,
+      houses: property.houses,
+      cost: property.houseCost
+    });
+
+    return true;
+  }
+
+  canBuyHotel(playerId: string, propertyId: number): boolean {
+    const player = this.players.find(p => p.id === playerId);
+    const property = this.board.getProperty(propertyId);
+
+    if (!player || !property) return false;
+    if (property.ownerId !== playerId) return false;
+    if (property.houses !== MAX_HOUSES_PER_PROPERTY) return false;
+    if (property.hotels > 0) return false;
+
+    if (player.money < (property.hotelCost || 0)) return false;
+
+    return true;
+  }
+
+  buyHotel(playerId: string, propertyId: number): boolean {
+    if (!this.canBuyHotel(playerId, propertyId)) return false;
+
+    const player = this.players.find(p => p.id === playerId);
+    const property = this.board.getProperty(propertyId);
+
+    if (!player || !property || !property.hotelCost) return false;
+
+    const success = player.deductMoney(property.hotelCost);
+    if (!success) return false;
+
+    property.houses = 0;
+    property.hotels = 1;
+
+    console.log(`🏨 ${player.name} built hotel on ${property.name}`);
+
+    this.emit('hotelBought', {
+      playerId,
+      propertyId,
+      propertyName: property.name,
+      cost: property.hotelCost
+    });
+
+    return true;
+  }
+
   payRent(payerId: string, propertyId: number, diceTotal?: number): boolean {
     const payer = this.players.find((p) => p.id === payerId);
     const property = this.board.getProperty(propertyId);
@@ -343,6 +444,21 @@ export class GameEngine {
     if (!owner) return false;
 
     let rent = property.rent;
+
+    // Calculate rent based on improvements
+    if (property.hotels > 0 && property.rentWithHouses) {
+      rent = property.rentWithHouses[4]; // Hotel rent
+      console.log(`🏨 Hotel rent: $${rent}`);
+    } else if (property.houses > 0 && property.rentWithHouses) {
+      rent = property.rentWithHouses[property.houses - 1];
+      console.log(`🏠 Rent with ${property.houses} houses: $${rent}`);
+    } else if (property.color && property.color !== 'railroad' && property.color !== 'utility') {
+      // Monopoly without improvements = double rent
+      if (this.hasMonopoly(property.ownerId!, property.color)) {
+        rent = property.rent * 2;
+        console.log(`🎯 Monopoly rent (doubled): $${rent}`);
+      }
+    }
 
     // Calculate railroad rent based on number owned
     if (property.color === "railroad") {
