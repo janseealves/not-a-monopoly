@@ -9,6 +9,7 @@ export class Player implements IPlayer {
   inJail: boolean;
   jailTurns: number;
   consecutiveDoublesCount: number;
+  isBankrupt: boolean;
 
   constructor(id: string, name: string, startingMoney: number) {
     this.id = id;
@@ -19,6 +20,7 @@ export class Player implements IPlayer {
     this.inJail = false;
     this.jailTurns = 0;
     this.consecutiveDoublesCount = 0;
+    this.isBankrupt = false;
   }
 
   addMoney(amount: number): void {
@@ -41,10 +43,6 @@ export class Player implements IPlayer {
     return true;
   }
 
-  isBankrupt(): boolean {
-    return this.money < 0;
-  }
-
   addProperty(propertyId: number): void {
     if (!this.properties.includes(propertyId)) {
       this.properties.push(propertyId);
@@ -58,6 +56,10 @@ export class Player implements IPlayer {
 
   setPosition(pos: number): void {
     this.position = pos % 40;
+  }
+
+  setBankrupt(): void {
+    this.isBankrupt = true;
   }
 }
 
