@@ -246,10 +246,12 @@ export default function Home() {
       setLogs(prev => [...prev, `${currentPlayer.name} paid $${BAIL_AMOUNT} bail and got out of jail`]);
       setMessage(`✅ You paid $${BAIL_AMOUNT} bail! You can now roll.`);
       setHasRolled(false); // Allow rolling
+
+      // Force immediate state update to hide jail UI
+      setGameState(game.getGameState());
     } else {
       setMessage(`❌ You don't have enough money for bail ($${BAIL_AMOUNT})`);
     }
-    forceUpdate();
   };
 
   const handleIncomeTaxChoice = (payTenPercent: boolean) => {

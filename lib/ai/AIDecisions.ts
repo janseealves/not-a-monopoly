@@ -83,11 +83,12 @@ export class AIDecisions {
   }
 
   private static evaluateRailroadValue(player: Player, property: Property): number {
-    if (!property.name.toLowerCase().includes('railroad')) return 0;
+    if (property.color !== 'railroad') return 0;
 
-    const railroadsOwned = player.properties.filter(id => {
-      return true;
-    }).length;
+    // Count how many railroads player already owns
+    // Railroad IDs from Board.ts: positions 5, 15, 25, 35
+    const railroadIds = [5, 15, 25, 35];
+    const railroadsOwned = player.properties.filter(id => railroadIds.includes(id)).length;
 
     return Math.min(railroadsOwned * 0.15 + 0.4, 0.6);
   }
