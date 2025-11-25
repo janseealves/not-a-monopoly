@@ -532,44 +532,60 @@ export class GameEngine {
 
     switch (card.action.type) {
       case 'MOVE_TO': {
-        // Move player to position
-        const oldPos = player.position;
-        player.setPosition(card.action.position);
+        if (card.action.type === 'MOVE_TO') {
+          // Move player to position
+          const moveToAction = card.action;
+          const oldPos = player.position;
+          player.setPosition(moveToAction.position);
 
-        // Check if passed GO (went backwards on the board means passing GO)
-        if (oldPos > player.position) {
-          player.addMoney(PASS_GO_AMOUNT);
-          console.log(`💰 ${player.name} passed GO and collected $${PASS_GO_AMOUNT}!`);
+          // Check if passed GO (went backwards on the board means passing GO)
+          if (oldPos > player.position) {
+            player.addMoney(PASS_GO_AMOUNT);
+            console.log(`💰 ${player.name} passed GO and collected $${PASS_GO_AMOUNT}!`);
+          }
         }
         break;
       }
 
-      case 'MOVE_RELATIVE':
-        // Move forward or back relative steps
-        player.move(card.action.steps, this.board.tiles.length);
-        break;
-
-      case 'PAY':
-        player.money -= card.action.amount;
-        console.log(`💸 ${player.name} paid $${card.action.amount}`);
-        if (player.money < 0) {
-          this.declareBankruptcy(playerId);
+      case 'MOVE_RELATIVE': {
+        if (card.action.type === 'MOVE_RELATIVE') {
+          // Move forward or back relative steps
+          const moveRelativeAction = card.action;
+          player.move(moveRelativeAction.steps, this.board.tiles.length);
         }
         break;
+      }
 
-      case 'COLLECT':
-        player.addMoney(card.action.amount);
-        console.log(`💰 ${player.name} collected $${card.action.amount}`);
+      case 'PAY': {
+        if (card.action.type === 'PAY') {
+          const payAction = card.action;
+          player.money -= payAction.amount;
+          console.log(`💸 ${player.name} paid $${payAction.amount}`);
+          if (player.money < 0) {
+            this.declareBankruptcy(playerId);
+          }
+        }
         break;
+      }
+
+      case 'COLLECT': {
+        if (card.action.type === 'COLLECT') {
+          const collectAction = card.action;
+          player.addMoney(collectAction.amount);
+          console.log(`💰 ${player.name} collected $${collectAction.amount}`);
+        }
+        break;
+      }
 
       case 'PAY_PER_HOUSE': {
         let totalRepairs = 0;
         if (card.action.type === 'PAY_PER_HOUSE') {
+          const payPerHouseAction = card.action;
           player.properties.forEach(propId => {
             const prop = this.board.getProperty(propId);
             if (prop) {
-              totalRepairs += prop.houses * card.action.houseAmount;
-              totalRepairs += prop.hotels * card.action.hotelAmount;
+              totalRepairs += prop.houses * payPerHouseAction.houseAmount;
+              totalRepairs += prop.hotels * payPerHouseAction.hotelAmount;
             }
           });
         }
@@ -584,11 +600,12 @@ export class GameEngine {
       case 'COLLECT_FROM_PLAYERS': {
         // Collect from all other active players
         if (card.action.type === 'COLLECT_FROM_PLAYERS') {
+          const collectFromPlayersAction = card.action;
           this.players.forEach(p => {
             if (p.id !== playerId && !p.isBankrupt) {
-              p.money -= card.action.amount;
-              player.addMoney(card.action.amount);
-              console.log(`💰 ${player.name} collected $${card.action.amount} from ${p.name}`);
+              p.money -= collectFromPlayersAction.amount;
+              player.addMoney(collectFromPlayersAction.amount);
+              console.log(`💰 ${player.name} collected $${collectFromPlayersAction.amount} from ${p.name}`);
               if (p.money < 0) {
                 this.declareBankruptcy(p.id);
               }
@@ -601,11 +618,12 @@ export class GameEngine {
       case 'PAY_TO_PLAYERS': {
         // Pay to all other active players
         if (card.action.type === 'PAY_TO_PLAYERS') {
+          const payToPlayersAction = card.action;
           this.players.forEach(p => {
             if (p.id !== playerId && !p.isBankrupt) {
-              player.money -= card.action.amount;
-              p.addMoney(card.action.amount);
-              console.log(`💸 ${player.name} paid $${card.action.amount} to ${p.name}`);
+              player.money -= payToPlayersAction.amount;
+              p.addMoney(payToPlayersAction.amount);
+              console.log(`💸 ${player.name} paid $${payToPlayersAction.amount} to ${p.name}`);
             }
           });
         }
@@ -624,11 +642,15 @@ export class GameEngine {
         this.sendToJail(playerId);
         break;
 
-      case 'GO_BACK':
-        // Go back N spaces
-        player.move(-card.action.spaces, this.board.tiles.length);
-        console.log(`⬅️ ${player.name} went back ${card.action.spaces} spaces`);
+      case 'GO_BACK': {
+        if (card.action.type === 'GO_BACK') {
+          // Go back N spaces
+          const goBackAction = card.action;
+          player.move(-goBackAction.spaces, this.board.tiles.length);
+          console.log(`⬅️ ${player.name} went back ${goBackAction.spaces} spaces`);
+        }
         break;
+      }
     }
   }
 }
