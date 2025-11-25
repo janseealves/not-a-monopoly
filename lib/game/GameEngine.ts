@@ -1,7 +1,7 @@
 import { Player } from "./Player";
 import Board from "./Board";
-import { STARTING_MONEY } from "../constants";
-import { GameState, MoveResult, GameEventType, DiceRoll, TileType } from "../types";
+import { STARTING_MONEY, PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT, BAIL_AMOUNT } from "../constants";
+import { GameState, MoveResult, GameEventType, DiceRoll, BoardTile, TileType } from "../types";
 
 export class GameEngine {
   players: Player[];
@@ -64,6 +64,12 @@ export class GameEngine {
   }
 
   nextTurn(): void {
+    // Reset consecutive doubles count when changing player
+    const currentPlayer = this.getCurrentPlayer();
+    if (currentPlayer) {
+      currentPlayer.consecutiveDoublesCount = 0;
+    }
+
     this.doubleRollCount = 0;
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     if (this.currentPlayerIndex === 0) this.round += 1;
@@ -88,30 +94,41 @@ export class GameEngine {
   sendToJail(playerId: string): void {
     const player = this.players.find(p => p.id === playerId);
     if (player) {
+      console.log(`🚔 ${player.name} foi para a prisão!`);
+      player.position = 10; // JAIL position
       player.inJail = true;
-      player.position = 10;
+      player.jailTurns = 0;
+      player.consecutiveDoublesCount = 0;
       this.emit('playerJailed', { playerId, reason: 'sent_to_jail' });
     }
   }
 
   payBail(playerId: string): boolean {
     const player = this.players.find(p => p.id === playerId);
-    if (!player || !player.inJail || player.money < 50) {
+    if (!player || !player.inJail) return false;
+
+    if (player.money < BAIL_AMOUNT) {
+      console.log(`${player.name} não pode pagar a fiança ($${BAIL_AMOUNT})`);
       return false;
     }
 
-    player.deductMoney(50);
-    player.inJail = false;
-    this.emit('bailPaid', { playerId, amount: 50, playerMoney: player.money });
-    return true;
+    const success = player.deductMoney(BAIL_AMOUNT);
+    if (success) {
+      this.releaseFromJail(playerId);
+      console.log(`${player.name} pagou $${BAIL_AMOUNT} de fiança e saiu da prisão!`);
+    }
+    this.emit('bailPaid', { playerId, amount: BAIL_AMOUNT, playerMoney: player.money });
+    return success;
   }
 
   releaseFromJail(playerId: string): void {
-    const player = this.players.find(p => p.id === playerId);
-    if (player && player.inJail) {
-      player.inJail = false;
-      this.emit('playerReleased', { playerId, reason: 'doubles_rolled' });
-    }
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player) return;
+
+    console.log(`🔓 ${player.name} saiu da prisão!`);
+    player.inJail = false;
+    player.jailTurns = 0;
+    this.emit('playerReleased', { playerId, reason: 'doubles_rolled' });
   }
 
   attemptJailEscape(playerId: string): { escaped: boolean; diceRoll: DiceRoll } {
@@ -165,9 +182,24 @@ export class GameEngine {
   moveCurrentPlayer(steps: number): MoveResult | null {
     const player = this.getCurrentPlayer();
     if (!player) return null;
+
+    // Cannot move if in jail
+    if (player.inJail) {
+      console.log(`${player.name} is in jail and cannot move!`);
+      return null;
+    }
+
     const from = player.position;
     player.move(steps, this.board.tiles.length);
     const to = player.position;
+
+    // Check if player passed GO (wrapped around the board)
+    const passedGo = from + steps >= this.board.tiles.length;
+    if (passedGo) {
+      player.addMoney(PASS_GO_AMOUNT);
+      console.log(`💰 ${player.name} passou por GO e recebeu $${PASS_GO_AMOUNT}!`);
+    }
+
     const tile = this.board.getTile(to);
 
     const moveResult = {
@@ -175,6 +207,7 @@ export class GameEngine {
       from,
       to,
       tile,
+      passedGo,
     };
 
     this.emit('playerMoved', moveResult);
@@ -197,9 +230,14 @@ export class GameEngine {
     const property = this.board.getProperty(propertyId);
     if (!property || property.ownerId !== null) return false;
 
-    if (player.money < property.price) return false;
+    if (player.money < property.price) {
+      console.log(`${player.name} cannot afford ${property.name} ($${property.price})`);
+      return false;
+    }
 
-    player.deductMoney(property.price);
+    const success = player.deductMoney(property.price);
+    if (!success) return false;
+
     player.addProperty(propertyId);
     this.board.setPropertyOwner(propertyId, playerId);
 
@@ -214,7 +252,36 @@ export class GameEngine {
     return true;
   }
 
-  payRent(payerId: string, propertyId: number): boolean {
+  applyTax(player: Player, tile: BoardTile, payTenPercent?: boolean): number {
+    if (tile.type !== TileType.TAX) return 0;
+
+    let taxAmount = 0;
+
+    if (tile.name === "Income Tax") {
+      // Income Tax: player chooses 10% of total worth OR $200
+      const totalWorth = player.money + player.properties.reduce((sum, propId) => {
+        const prop = this.board.getProperty(propId);
+        return sum + (prop?.price ?? 0);
+      }, 0);
+
+      const tenPercentAmount = Math.floor(totalWorth * INCOME_TAX_PERCENT);
+      const fixedAmount = 200;
+
+      // payTenPercent parameter indicates player's choice
+      taxAmount = payTenPercent ? tenPercentAmount : fixedAmount;
+
+      console.log(`💸 ${player.name} paid Income Tax: $${taxAmount} (chose ${payTenPercent ? '10%' : '$200'})`);
+    } else if (tile.name === "Luxury Tax") {
+      // Luxury Tax: fixed $75
+      taxAmount = LUXURY_TAX_AMOUNT;
+      console.log(`💸 ${player.name} paid Luxury Tax: $${taxAmount}`);
+    }
+
+    player.money -= taxAmount; // Deduct tax directly (allow negative)
+    return taxAmount;
+  }
+
+  payRent(payerId: string, propertyId: number, diceTotal?: number): boolean {
     const payer = this.players.find((p) => p.id === payerId);
     const property = this.board.getProperty(propertyId);
 
@@ -224,9 +291,24 @@ export class GameEngine {
     const owner = this.players.find((p) => p.id === property.ownerId);
     if (!owner) return false;
 
-    const rent = property.rent;
+    let rent = property.rent;
 
-    payer.deductMoney(rent);
+    // Calculate utility rent based on dice roll
+    if (property.color === "utility" && diceTotal) {
+      // Count how many utilities the owner has
+      const ownerUtilities = owner.properties.filter(propId => {
+        const prop = this.board.getProperty(propId);
+        return prop?.color === "utility";
+      }).length;
+
+      // 1 utility: 4x dice roll, 2 utilities: 10x dice roll
+      const multiplier = ownerUtilities === 2 ? 10 : 4;
+      rent = diceTotal * multiplier;
+      console.log(`💸 Utility rent: ${diceTotal} × ${multiplier} = $${rent} (owner has ${ownerUtilities} utilities)`);
+    }
+
+    // Allow negative for rent (bankruptcy handling can come later)
+    payer.money -= rent; // Deduct rent directly (allow negative)
     owner.addMoney(rent);
 
     this.emit('rentPaid', {

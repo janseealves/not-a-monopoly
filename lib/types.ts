@@ -1,5 +1,12 @@
 export type PlayerId = string;
 
+export interface DiceRoll {
+  d1: number;
+  d2: number;
+  total: number;
+  isDouble: boolean;
+}
+
 export enum TileType {
   GO = "GO",
   PROPERTY = "PROPERTY",
@@ -34,7 +41,9 @@ export interface Player {
   money: number;
   position: number;
   properties: number[];
-  inJail?: boolean;
+  inJail: boolean;
+  jailTurns: number;
+  consecutiveDoublesCount: number;
 }
 
 export interface GameState {
@@ -48,6 +57,7 @@ export interface MoveResult {
   from: number;
   to: number;
   tile: BoardTile;
+  passedGo?: boolean;
 }
 
 export interface GameEvent {

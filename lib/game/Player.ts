@@ -7,6 +7,8 @@ export class Player implements IPlayer {
   position: number;
   properties: number[];
   inJail: boolean;
+  jailTurns: number;
+  consecutiveDoublesCount: number;
 
   constructor(id: string, name: string, startingMoney: number) {
     this.id = id;
@@ -15,13 +17,26 @@ export class Player implements IPlayer {
     this.position = 0;
     this.properties = [];
     this.inJail = false;
+    this.jailTurns = 0;
+    this.consecutiveDoublesCount = 0;
   }
 
   addMoney(amount: number): void {
     this.money += amount;
   }
 
-  deductMoney(amount: number): boolean {
+  canAfford(amount: number): boolean {
+    return this.money >= amount;
+  }
+
+  deductMoney(amount: number, options?: { allowNegative?: boolean }): boolean {
+    const allowNegative = options?.allowNegative ?? false;
+
+    if (!allowNegative && this.money < amount) {
+      console.warn(`${this.name} cannot afford $${amount} (has $${this.money})`);
+      return false;
+    }
+
     this.money -= amount;
     return true;
   }
