@@ -2,6 +2,7 @@ interface GameControlsProps {
   onBuyProperty: () => void;
   onEndTurn: () => void;
   canBuyProperty: boolean;
+  canEndTurn: boolean;
   disabled?: boolean;
   propertyPrice?: number;
   propertyName?: string;
@@ -11,6 +12,7 @@ export default function GameControls({
   onBuyProperty,
   onEndTurn,
   canBuyProperty,
+  canEndTurn,
   disabled = false,
   propertyPrice,
   propertyName
@@ -45,13 +47,13 @@ export default function GameControls({
 
         <button
           onClick={onEndTurn}
-          disabled={disabled}
+          disabled={!canEndTurn || disabled}
           className={`
             w-full py-3 px-4 rounded-lg font-semibold
             transition-colors duration-200
-            ${disabled
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer'
+            ${canEndTurn && !disabled
+              ? 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }
           `}
         >

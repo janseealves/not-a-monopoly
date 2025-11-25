@@ -18,6 +18,7 @@ export default function Home() {
   const [lastRentTransaction, setLastRentTransaction] = useState<{ amount: number; paidTo?: string; receivedFrom?: string } | null>(null);
   const [showIncomeTaxChoice, setShowIncomeTaxChoice] = useState(false);
   const [incomeTaxOptions, setIncomeTaxOptions] = useState<{ tenPercent: number; fixed: number } | null>(null);
+  const [canBuyCurrentProperty, setCanBuyCurrentProperty] = useState(false);
 
   // Initialize game on mount
   useEffect(() => {
@@ -64,8 +65,7 @@ export default function Home() {
 
     // Handle jail logic
     if (currentPlayer.inJail) {
-      currentPlayer.jailTurns++;
-      console.log(`[JAIL] ${currentPlayer.name} is in jail. Turn ${currentPlayer.jailTurns}/3`);
+      console.log(`[JAIL] ${currentPlayer.name} is in jail. Turn ${currentPlayer.jailTurns + 1}/3`);
 
       if (result.isDouble) {
         // Rolled doubles - get out of jail!
@@ -75,7 +75,9 @@ export default function Home() {
         setHasRolled(false); // Can roll again
         forceUpdate();
         return;
-      } else if (currentPlayer.jailTurns >= 3) {
+      } else if (currentPlayer.jailTurns >= 2) {
+        // Increment before checking (this is the 3rd turn)
+        currentPlayer.jailTurns++;
         // 3 turns in jail - must pay bail or stay
         if (currentPlayer.canAfford(BAIL_AMOUNT)) {
           game.payBail(currentPlayer.id);
@@ -88,7 +90,8 @@ export default function Home() {
         forceUpdate();
         return;
       } else {
-        // Still in jail
+        // Still in jail - increment jail turns
+        currentPlayer.jailTurns++;
         setMessage(`${currentPlayer.name} rolled ${result.d1} + ${result.d2} (no doubles). Still in jail. (Turn ${currentPlayer.jailTurns}/3)`);
         setLogs(prev => [...prev, `${currentPlayer.name} failed to roll doubles. Jail turn ${currentPlayer.jailTurns}/3`]);
         forceUpdate();
@@ -183,9 +186,11 @@ export default function Home() {
           ? `You can buy ${finalTile.name} for $${finalTile.property.price}! Roll again or End Turn.`
           : `You can buy ${finalTile.name} for $${finalTile.property.price}! Click "Buy Property" or "End Turn"`;
         setMessage(actionMsg);
+        setCanBuyCurrentProperty(true); // Enable buy button
       } else {
         logMsg += ` - Too expensive! ($${finalTile.property.price})`;
         setMessage(`${finalTile.name} costs $${finalTile.property.price} but you only have $${currentPlayer.money}`);
+        setCanBuyCurrentProperty(false); // Can't afford
       }
     } else if (finalTile.property?.ownerId && finalTile.property.ownerId !== currentPlayer.id) {
       // Pay rent to owner
@@ -217,6 +222,7 @@ export default function Home() {
     } else {
       const endMsg = result.isDouble ? `${logMsg}. Roll again!` : logMsg;
       setMessage(endMsg);
+      setCanBuyCurrentProperty(false); // No property to buy
     }
 
     setLogs(prev => [...prev, logMsg]);
@@ -269,8 +275,8 @@ export default function Home() {
   };
 
   const handleBuyProperty = () => {
-    if (!game || !isHumanTurn() || !hasRolled) return;
-    
+    if (!game || !isHumanTurn()) return;
+
     const currentPlayer = game.getCurrentPlayer();
     if (!currentPlayer) return;
 
@@ -284,6 +290,7 @@ export default function Home() {
     if (success) {
       setLogs(prev => [...prev, `${currentPlayer.name} bought ${currentTile.property!.name} for $${currentTile.property!.price}`]);
       setMessage(`Bought ${currentTile.property!.name}!`);
+      setCanBuyCurrentProperty(false); // Property bought, disable button
       forceUpdate();
     } else {
       setMessage('Not enough money!');
@@ -299,7 +306,8 @@ export default function Home() {
     setLogs(prev => [...prev, `${currentPlayer.name} ended their turn`]);
     setIsProcessing(true);
     setLastRentTransaction(null); // Clear rent notification
-    
+    setCanBuyCurrentProperty(false); // Reset buy property state for next turn
+
     game.nextTurn();
     forceUpdate();
     
@@ -312,6 +320,7 @@ export default function Home() {
     // Reset state for next human turn
     setHasRolled(false);
     setIsProcessing(false);
+    setCanBuyCurrentProperty(false); // Reset for new turn
     setMessage(`${game.getCurrentPlayer()?.name}'s turn! Roll the dice.`);
     forceUpdate();
   };
@@ -340,8 +349,7 @@ export default function Home() {
 
         // Handle jail logic for AI
         if (currentAI.inJail) {
-          currentAI.jailTurns++;
-          console.log(`[AI JAIL] ${currentAI.name} is in jail. Turn ${currentAI.jailTurns}/3`);
+          console.log(`[AI JAIL] ${currentAI.name} is in jail. Turn ${currentAI.jailTurns + 1}/3`);
 
           if (roll.isDouble) {
             // Rolled doubles - get out of jail!
@@ -352,7 +360,9 @@ export default function Home() {
             canRollAgain = true; // Can roll again after escaping
             await new Promise(resolve => setTimeout(resolve, 400));
             continue; // Skip to next iteration to actually move
-          } else if (currentAI.jailTurns >= 3) {
+          } else if (currentAI.jailTurns >= 2) {
+            // Increment before checking (this is the 3rd turn)
+            currentAI.jailTurns++;
             // 3 turns in jail - pay bail
             game.payBail(currentAI.id);
             setMessage(`${currentAI.name} paid $${BAIL_AMOUNT} bail after 3 turns`);
@@ -361,7 +371,8 @@ export default function Home() {
             canRollAgain = false;
             break; // End turn after paying bail
           } else {
-            // Still in jail
+            // Still in jail - increment jail turns
+            currentAI.jailTurns++;
             setMessage(`${currentAI.name} failed to roll doubles. Jail turn ${currentAI.jailTurns}/3`);
             setLogs(prev => [...prev, `${currentAI.name} failed to roll doubles. Jail turn ${currentAI.jailTurns}/3`]);
             forceUpdate();
@@ -526,17 +537,13 @@ export default function Home() {
 
   const currentPlayer = game.getCurrentPlayer();
   const humanTurn = isHumanTurn();
-  
+
   // Check if current tile is a buyable property
   const currentTile = currentPlayer ? game.board.tiles[currentPlayer.position] : null;
   const canBuyProperty = Boolean(
-    humanTurn && 
-    hasRolled && 
-    !isProcessing && 
-    currentTile?.property && 
-    !currentTile.property.ownerId &&
-    currentPlayer &&
-    currentPlayer.money >= currentTile.property.price
+    humanTurn &&
+    !isProcessing &&
+    canBuyCurrentProperty
   );
 
   // Get property details for buy button
@@ -632,9 +639,9 @@ export default function Home() {
                 </div>
                 <button
                   onClick={handlePayBail}
-                  disabled={!currentPlayer.canAfford(BAIL_AMOUNT)}
+                  disabled={currentPlayer.money < BAIL_AMOUNT}
                   className={`w-full font-bold py-2 px-4 rounded transition-all ${
-                    currentPlayer.canAfford(BAIL_AMOUNT)
+                    currentPlayer.money >= BAIL_AMOUNT
                       ? 'bg-green-500 hover:bg-green-600 active:scale-95'
                       : 'bg-gray-500 cursor-not-allowed'
                   }`}
@@ -652,7 +659,8 @@ export default function Home() {
               onBuyProperty={handleBuyProperty}
               onEndTurn={handleEndTurn}
               canBuyProperty={canBuyProperty}
-              disabled={!humanTurn || !hasRolled || isProcessing}
+              canEndTurn={hasRolled}
+              disabled={!humanTurn || isProcessing}
               propertyPrice={buyableProperty?.price}
               propertyName={buyableProperty?.name}
             />
