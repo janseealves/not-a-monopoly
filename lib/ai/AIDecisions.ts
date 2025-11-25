@@ -56,6 +56,14 @@ export class AIDecisions {
     return (turnsBenefit + moneyPressure) > 0.4;
   }
 
+  static shouldBuyHouse(player: Player, property: Property): boolean {
+    // AI keeps reserve of 3x house cost
+    const reserveAmount = (property.houseCost || 0) * 3;
+    if (player.money < reserveAmount) return false;
+
+    return true;
+  }
+
   private static getBaseMoneyRequirement(strategy: AIStrategy): number {
     switch (strategy) {
       case AIStrategy.AGGRESSIVE: return 1.2;
