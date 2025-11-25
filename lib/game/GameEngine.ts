@@ -293,6 +293,20 @@ export class GameEngine {
 
     let rent = property.rent;
 
+    // Calculate railroad rent based on number owned
+    if (property.color === "railroad") {
+      const ownerRailroads = owner.properties.filter(propId => {
+        const prop = this.board.getProperty(propId);
+        return prop?.color === "railroad";
+      }).length;
+
+      // Standard Monopoly railroad rent: 25, 50, 100, 200
+      const railroadRents = [25, 50, 100, 200];
+      rent = railroadRents[ownerRailroads - 1] || 25;
+
+      console.log(`🚂 Railroad rent: ${ownerRailroads} owned = $${rent}`);
+    }
+
     // Calculate utility rent based on dice roll
     if (property.color === "utility" && diceTotal) {
       // Count how many utilities the owner has
