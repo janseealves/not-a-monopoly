@@ -10,6 +10,7 @@ export class Player implements IPlayer {
   jailTurns: number;
   consecutiveDoublesCount: number;
   isBankrupt: boolean;
+  getOutOfJailFreeCards: number;
 
   constructor(id: string, name: string, startingMoney: number) {
     this.id = id;
@@ -21,6 +22,7 @@ export class Player implements IPlayer {
     this.jailTurns = 0;
     this.consecutiveDoublesCount = 0;
     this.isBankrupt = false;
+    this.getOutOfJailFreeCards = 0;
   }
 
   addMoney(amount: number): void {

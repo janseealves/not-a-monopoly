@@ -83,8 +83,15 @@ export default function PlayerList({ players, currentPlayerIndex }: PlayerListPr
             
             <div className="text-xs text-gray-600 font-medium mb-1">
               Position: {player.position}
+              {player.inJail && <span className="ml-2 text-red-600 font-bold">🚔 IN JAIL</span>}
             </div>
-            
+
+            {player.getOutOfJailFreeCards > 0 && (
+              <div className="text-xs font-bold text-blue-600 mb-1">
+                🎫 Get Out of Jail Free Cards: {player.getOutOfJailFreeCards}
+              </div>
+            )}
+
             {player.properties.length > 0 && (
               <div className="mt-2">
                 <div className="text-xs font-bold text-gray-800 mb-1">

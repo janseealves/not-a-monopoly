@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { GameEngine } from '@/lib/game';
 import { AIDecisions, AIStrategy } from '@/lib/ai/AIDecisions';
 import { Board, DiceRoller, GameControls, PlayerList, GameStatus } from './components';
-import { DiceRoll, TileType } from '@/lib/types';
+import { DiceRoll, TileType, Card, CardType } from '@/lib/types';
 import { PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT, BAIL_AMOUNT } from '@/lib/constants';
 
 export default function Home() {
@@ -21,6 +21,7 @@ export default function Home() {
   const [canBuyCurrentProperty, setCanBuyCurrentProperty] = useState(false);
   const [gameWinner, setGameWinner] = useState<string | null>(null);
   const [showPropertyManagement, setShowPropertyManagement] = useState(false);
+  const [drawnCard, setDrawnCard] = useState<Card | null>(null);
 
   // Initialize game on mount
   useEffect(() => {
@@ -36,6 +37,10 @@ export default function Home() {
     gameInstance.addEventListener('gameWon', (data) => {
       setGameWinner(data.playerName);
       setMessage(`🏆 ${data.playerName} wins the game!`);
+    });
+
+    gameInstance.addEventListener('cardDrawn', (data) => {
+      setDrawnCard(data.card);
     });
 
     setGame(gameInstance);
@@ -153,6 +158,19 @@ export default function Home() {
       setLogs(prev => [...prev, `${currentPlayer.name} landed on Go To Jail`]);
       forceUpdate();
       return;
+    }
+
+    // Check if landed on CHANCE or COMMUNITY_CHEST tile
+    if (finalTile.type === TileType.CHANCE || finalTile.type === TileType.COMMUNITY_CHEST) {
+      const cardType = finalTile.type === TileType.CHANCE ? CardType.CHANCE : CardType.COMMUNITY_CHEST;
+      const card = game.drawCard(cardType);
+      if (card) {
+        game.resolveCardAction(currentPlayer.id, card);
+        // Card modal will show via event listener
+        setLogs(prev => [...prev, `${currentPlayer.name} drew a ${cardType} card`]);
+        forceUpdate();
+        return; // Wait for user to acknowledge card
+      }
     }
 
     // Check if landed on TAX tile
@@ -466,6 +484,20 @@ export default function Home() {
           forceUpdate();
           canRollAgain = false;
           break; // End turn
+        }
+
+        // Check if landed on CHANCE or COMMUNITY_CHEST tile
+        if (finalTile.type === TileType.CHANCE || finalTile.type === TileType.COMMUNITY_CHEST) {
+          const cardType = finalTile.type === TileType.CHANCE ? CardType.CHANCE : CardType.COMMUNITY_CHEST;
+          const card = game.drawCard(cardType);
+          if (card) {
+            game.resolveCardAction(currentAI.id, card);
+            setMessage(`${currentAI.name} drew: ${card.description}`);
+            setLogs(prev => [...prev, `${currentAI.name} drew a ${cardType} card: ${card.description}`]);
+            forceUpdate();
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Show card for 2 seconds
+            setDrawnCard(null); // Auto-dismiss for AI
+          }
         }
 
         // Check if landed on TAX tile
@@ -907,6 +939,26 @@ export default function Home() {
           </div>
           );
         })()}
+
+        {/* Card Modal */}
+        {drawnCard && (
+          <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none backdrop-blur-sm">
+            <div className="pointer-events-auto">
+              <div className="bg-white p-6 rounded-lg shadow-2xl max-w-md">
+                <h3 className="text-2xl font-bold mb-4 text-center text-gray-800">
+                  {drawnCard.type === CardType.CHANCE ? '🎴 Chance' : '📦 Community Chest'}
+                </h3>
+                <p className="text-lg mb-6 text-center text-gray-700">{drawnCard.description}</p>
+                <button
+                  onClick={() => setDrawnCard(null)}
+                  className="w-full bg-blue-500 text-white px-4 py-3 rounded font-bold hover:bg-blue-600 active:scale-95 transition-all"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

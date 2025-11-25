@@ -1,7 +1,8 @@
 import { Player } from "./Player";
 import Board from "./Board";
+import { Deck } from "./Deck";
 import { STARTING_MONEY, PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT, BAIL_AMOUNT, MAX_HOUSES_PER_PROPERTY, MAX_HOTELS_PER_PROPERTY } from "../constants";
-import { GameState, MoveResult, GameEventType, DiceRoll, BoardTile, TileType } from "../types";
+import { GameState, MoveResult, GameEventType, DiceRoll, BoardTile, TileType, Card, CardType } from "../types";
 
 export class GameEngine {
   players: Player[];
@@ -10,12 +11,16 @@ export class GameEngine {
   round: number;
   private doubleRollCount: number = 0;
   private eventListeners: Map<GameEventType, ((data: any) => void)[]> = new Map();
+  private chanceDeck: Deck;
+  private communityChestDeck: Deck;
 
   constructor(playerNames: string[] = []) {
     this.players = playerNames.map((n, i) => new Player(String(i + 1), n, STARTING_MONEY));
     this.board = new Board();
     this.currentPlayerIndex = 0;
     this.round = 1;
+    this.chanceDeck = new Deck(CardType.CHANCE);
+    this.communityChestDeck = new Deck(CardType.COMMUNITY_CHEST);
   }
 
   getGameState(): GameState {
@@ -509,6 +514,122 @@ export class GameEngine {
     }
 
     return true;
+  }
+
+  drawCard(type: CardType): Card | null {
+    const deck = type === CardType.CHANCE ? this.chanceDeck : this.communityChestDeck;
+    return deck.draw();
+  }
+
+  resolveCardAction(playerId: string, card: Card): void {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) return;
+
+    console.log(`📋 ${player.name} drew: ${card.description}`);
+
+    // Emit event for UI to show card
+    this.emit('cardDrawn', { playerId, card });
+
+    switch (card.action.type) {
+      case 'MOVE_TO': {
+        // Move player to position
+        const oldPos = player.position;
+        player.setPosition(card.action.position);
+
+        // Check if passed GO (went backwards on the board means passing GO)
+        if (oldPos > player.position) {
+          player.addMoney(PASS_GO_AMOUNT);
+          console.log(`💰 ${player.name} passed GO and collected $${PASS_GO_AMOUNT}!`);
+        }
+        break;
+      }
+
+      case 'MOVE_RELATIVE':
+        // Move forward or back relative steps
+        player.move(card.action.steps, this.board.tiles.length);
+        break;
+
+      case 'PAY':
+        player.money -= card.action.amount;
+        console.log(`💸 ${player.name} paid $${card.action.amount}`);
+        if (player.money < 0) {
+          this.declareBankruptcy(playerId);
+        }
+        break;
+
+      case 'COLLECT':
+        player.addMoney(card.action.amount);
+        console.log(`💰 ${player.name} collected $${card.action.amount}`);
+        break;
+
+      case 'PAY_PER_HOUSE': {
+        let totalRepairs = 0;
+        if (card.action.type === 'PAY_PER_HOUSE') {
+          player.properties.forEach(propId => {
+            const prop = this.board.getProperty(propId);
+            if (prop) {
+              totalRepairs += prop.houses * card.action.houseAmount;
+              totalRepairs += prop.hotels * card.action.hotelAmount;
+            }
+          });
+        }
+        player.money -= totalRepairs;
+        console.log(`🔨 ${player.name} paid $${totalRepairs} for repairs`);
+        if (player.money < 0) {
+          this.declareBankruptcy(playerId);
+        }
+        break;
+      }
+
+      case 'COLLECT_FROM_PLAYERS': {
+        // Collect from all other active players
+        if (card.action.type === 'COLLECT_FROM_PLAYERS') {
+          this.players.forEach(p => {
+            if (p.id !== playerId && !p.isBankrupt) {
+              p.money -= card.action.amount;
+              player.addMoney(card.action.amount);
+              console.log(`💰 ${player.name} collected $${card.action.amount} from ${p.name}`);
+              if (p.money < 0) {
+                this.declareBankruptcy(p.id);
+              }
+            }
+          });
+        }
+        break;
+      }
+
+      case 'PAY_TO_PLAYERS': {
+        // Pay to all other active players
+        if (card.action.type === 'PAY_TO_PLAYERS') {
+          this.players.forEach(p => {
+            if (p.id !== playerId && !p.isBankrupt) {
+              player.money -= card.action.amount;
+              p.addMoney(card.action.amount);
+              console.log(`💸 ${player.name} paid $${card.action.amount} to ${p.name}`);
+            }
+          });
+        }
+        if (player.money < 0) {
+          this.declareBankruptcy(playerId);
+        }
+        break;
+      }
+
+      case 'GET_OUT_OF_JAIL_FREE':
+        player.getOutOfJailFreeCards++;
+        console.log(`🎫 ${player.name} received a Get Out of Jail Free card!`);
+        break;
+
+      case 'GO_TO_JAIL':
+        this.sendToJail(playerId);
+        break;
+
+      case 'GO_BACK':
+        // Go back N spaces
+        player.move(-card.action.spaces, this.board.tiles.length);
+        console.log(`⬅️ ${player.name} went back ${card.action.spaces} spaces`);
+        break;
+    }
   }
 }
 
