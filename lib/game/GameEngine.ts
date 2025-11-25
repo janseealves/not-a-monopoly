@@ -565,11 +565,12 @@ export class GameEngine {
       case 'PAY_PER_HOUSE': {
         let totalRepairs = 0;
         if (card.action.type === 'PAY_PER_HOUSE') {
+          const payPerHouseAction = card.action;
           player.properties.forEach(propId => {
             const prop = this.board.getProperty(propId);
             if (prop) {
-              totalRepairs += prop.houses * card.action.houseAmount;
-              totalRepairs += prop.hotels * card.action.hotelAmount;
+              totalRepairs += prop.houses * payPerHouseAction.houseAmount;
+              totalRepairs += prop.hotels * payPerHouseAction.hotelAmount;
             }
           });
         }
