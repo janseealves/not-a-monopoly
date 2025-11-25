@@ -11,20 +11,16 @@ export class SimpleAI {
     }
   }
 
-  public executeTurn(game: GameEngine): void {
-    const player = game.getCurrentPlayer();
-    if (!player) return;
+  public shouldBuyProperty(property: Property, player: Player): boolean {
+    return AIDecisions.shouldBuyProperty(player, property, this.strategy);
+  }
 
-    const diceRoll = game.rollDice();
+  public shouldPayBail(player: Player): boolean {
+    return AIDecisions.shouldPayBailDecision(player, this.strategy);
+  }
 
-    const moveResult = game.moveCurrentPlayer(diceRoll.total);
-    if (!moveResult) return;
-
-    console.log(`[AI ${player.name}] rolou ${diceRoll.d1}+${diceRoll.d2}=${diceRoll.total} e caiu em ${moveResult.tile.name}`);
-
-    this.handleLanding(game, player, moveResult.tile, diceRoll.total);
-
-    game.nextTurn(); 
+  public shouldStayInJail(player: Player): boolean {
+    return AIDecisions.evaluateJailStay(player);
   }
 
   protected handleLanding(
