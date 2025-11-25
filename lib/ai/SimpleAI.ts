@@ -15,14 +15,14 @@ export class SimpleAI {
     const player = game.getCurrentPlayer();
     if (!player) return;
 
-    const roll = game.rollDice();
-    
-    const moveResult = game.moveCurrentPlayer(roll);
+    const diceRoll = game.rollDice();
+
+    const moveResult = game.moveCurrentPlayer(diceRoll.total);
     if (!moveResult) return;
 
-    console.log(`[AI ${player.name}] rolou ${roll} e caiu em ${moveResult.tile.name}`);
+    console.log(`[AI ${player.name}] rolou ${diceRoll.d1}+${diceRoll.d2}=${diceRoll.total} e caiu em ${moveResult.tile.name}`);
 
-    this.handleLanding(game, player, moveResult.tile, roll);
+    this.handleLanding(game, player, moveResult.tile, diceRoll.total);
 
     game.nextTurn(); 
   }
