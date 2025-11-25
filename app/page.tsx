@@ -19,12 +19,24 @@ export default function Home() {
   const [showIncomeTaxChoice, setShowIncomeTaxChoice] = useState(false);
   const [incomeTaxOptions, setIncomeTaxOptions] = useState<{ tenPercent: number; fixed: number } | null>(null);
   const [canBuyCurrentProperty, setCanBuyCurrentProperty] = useState(false);
+  const [gameWinner, setGameWinner] = useState<string | null>(null);
 
   // Initialize game on mount
   useEffect(() => {
     const playerNames = ['You', 'AI Player 1', 'AI Player 2', 'AI Player 3'];
     const gameInstance = new GameEngine(playerNames);
-    
+
+    // Add bankruptcy and win event listeners
+    gameInstance.addEventListener('playerBankrupt', (data) => {
+      setLogs(prev => [...prev, `💀 ${data.playerName} is bankrupt and eliminated!`]);
+      setMessage(`${data.playerName} went bankrupt!`);
+    });
+
+    gameInstance.addEventListener('gameWon', (data) => {
+      setGameWinner(data.playerName);
+      setMessage(`🏆 ${data.playerName} wins the game!`);
+    });
+
     setGame(gameInstance);
     setGameState(gameInstance.getGameState());
     setMessage('Game started! Roll the dice to begin.');
@@ -533,6 +545,26 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <p className="text-xl">Loading game...</p>
+      </div>
+    );
+  }
+
+  // Winner modal
+  if (gameWinner) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-lg shadow-2xl text-center">
+            <h2 className="text-4xl font-bold mb-4">🏆 Game Over! 🏆</h2>
+            <p className="text-2xl mb-4">{gameWinner} wins!</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-blue-500 text-white px-6 py-3 rounded font-bold hover:bg-blue-600"
+            >
+              New Game
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

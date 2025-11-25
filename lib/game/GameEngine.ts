@@ -71,8 +71,12 @@ export class GameEngine {
     }
 
     this.doubleRollCount = 0;
-    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
-    if (this.currentPlayerIndex === 0) this.round += 1;
+
+    // Skip to next non-bankrupt player
+    do {
+      this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+      if (this.currentPlayerIndex === 0) this.round += 1;
+    } while (this.getCurrentPlayer()?.isBankrupt);
   }
 
   processDoubleRoll(): boolean {
@@ -278,7 +282,54 @@ export class GameEngine {
     }
 
     player.money -= taxAmount; // Deduct tax directly (allow negative)
+
+    // Check bankruptcy after tax payment
+    if (player.money < 0) {
+      console.log(`⚠️ ${player.name} cannot afford tax! Money: $${player.money}`);
+      this.declareBankruptcy(player.id);
+    }
+
     return taxAmount;
+  }
+
+  checkBankruptcy(playerId: string): boolean {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || player.isBankrupt) return false;
+
+    return player.money < 0;
+  }
+
+  declareBankruptcy(playerId: string): void {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) return;
+
+    console.log(`💀 ${player.name} is bankrupt!`);
+    player.setBankrupt();
+
+    // Transfer all properties back to bank (unowned)
+    player.properties.forEach(propId => {
+      this.board.setPropertyOwner(propId, null);
+    });
+    player.properties = [];
+
+    this.emit('playerBankrupt', { playerId, playerName: player.name });
+
+    // Check for winner
+    this.checkWinCondition();
+  }
+
+  checkWinCondition(): void {
+    const activePlayers = this.players.filter(p => !p.isBankrupt);
+
+    if (activePlayers.length === 1) {
+      const winner = activePlayers[0];
+      console.log(`🏆 ${winner.name} wins the game!`);
+      this.emit('gameWon', { playerId: winner.id, playerName: winner.name });
+    }
+  }
+
+  getActivePlayers(): Player[] {
+    return this.players.filter(p => !p.isBankrupt);
   }
 
   payRent(payerId: string, propertyId: number, diceTotal?: number): boolean {
@@ -334,6 +385,12 @@ export class GameEngine {
       payerMoney: payer.money,
       ownerMoney: owner.money
     });
+
+    // Check bankruptcy after rent payment
+    if (payer.money < 0) {
+      console.log(`⚠️ ${payer.name} cannot afford rent! Money: $${payer.money}`);
+      this.declareBankruptcy(payer.id);
+    }
 
     return true;
   }

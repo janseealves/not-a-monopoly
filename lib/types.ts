@@ -44,6 +44,7 @@ export interface Player {
   inJail: boolean;
   jailTurns: number;
   consecutiveDoublesCount: number;
+  isBankrupt: boolean;
 }
 
 export interface GameState {
@@ -75,7 +76,8 @@ export type GameEventType =
   | 'playerBankrupt'
   | 'passGo'
   | 'bailPaid'
-  | 'playerReleased';
+  | 'playerReleased'
+  | 'gameWon';
 
 export interface DiceRoll {
   d1: number;
