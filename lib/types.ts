@@ -59,3 +59,27 @@ export interface MoveResult {
   tile: BoardTile;
   passedGo?: boolean;
 }
+
+export interface GameEvent {
+  type: string;
+  data: any;
+}
+
+export type GameEventType =
+  | 'playerMoved'
+  | 'rentPaid'
+  | 'propertyBought'
+  | 'playerJailed'
+  | 'turnStarted'
+  | 'turnEnded'
+  | 'playerBankrupt'
+  | 'passGo'
+  | 'bailPaid'
+  | 'playerReleased';
+
+export interface DiceRoll {
+  d1: number;
+  d2: number;
+  total: number;
+  isDouble: boolean;
+}

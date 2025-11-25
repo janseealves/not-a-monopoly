@@ -1,13 +1,15 @@
 import { Player } from "./Player";
 import Board from "./Board";
-import { STARTING_MONEY, PASS_GO_AMOUNT, INCOME_TAX_PERCENT, LUXURY_TAX_AMOUNT, BAIL_AMOUNT, MAX_JAIL_TURNS } from "../constants";
-import { GameState, MoveResult, DiceRoll, BoardTile, TileType } from "../types";
+import { STARTING_MONEY } from "../constants";
+import { GameState, MoveResult, GameEventType, DiceRoll, TileType } from "../types";
 
 export class GameEngine {
   players: Player[];
   board: Board;
   currentPlayerIndex: number;
   round: number;
+  private doubleRollCount: number = 0;
+  private eventListeners: Map<GameEventType, ((data: any) => void)[]> = new Map();
 
   constructor(playerNames: string[] = []) {
     this.players = playerNames.map((n, i) => new Player(String(i + 1), n, STARTING_MONEY));
@@ -24,11 +26,36 @@ export class GameEngine {
     };
   }
 
+  addEventListener(event: GameEventType, callback: (data: any) => void): void {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, []);
+    }
+    this.eventListeners.get(event)!.push(callback);
+  }
+
+  removeEventListener(event: GameEventType, callback: (data: any) => void): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      const index = listeners.indexOf(callback);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    }
+  }
+
+  private emit(event: GameEventType, data: any): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      listeners.forEach(callback => callback(data));
+    }
+  }
+
   rollDice(): DiceRoll {
     const d1 = Math.floor(Math.random() * 6) + 1;
     const d2 = Math.floor(Math.random() * 6) + 1;
     const total = d1 + d2;
     const isDouble = d1 === d2;
+
     return { d1, d2, total, isDouble };
   }
 
@@ -37,51 +64,102 @@ export class GameEngine {
   }
 
   nextTurn(): void {
-    // Reset consecutive doubles count when changing player
-    const currentPlayer = this.getCurrentPlayer();
-    if (currentPlayer) {
-      currentPlayer.consecutiveDoublesCount = 0;
-    }
-
+    this.doubleRollCount = 0;
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     if (this.currentPlayerIndex === 0) this.round += 1;
   }
 
-  sendToJail(playerId: string): void {
-    const player = this.players.find((p) => p.id === playerId);
-    if (!player) return;
+  processDoubleRoll(): boolean {
+    this.doubleRollCount++;
 
-    console.log(`🚔 ${player.name} foi para a prisão!`);
-    player.position = 10; // JAIL position
-    player.inJail = true;
-    player.jailTurns = 0;
-    player.consecutiveDoublesCount = 0;
-  }
-
-  releaseFromJail(playerId: string): void {
-    const player = this.players.find((p) => p.id === playerId);
-    if (!player) return;
-
-    console.log(`🔓 ${player.name} saiu da prisão!`);
-    player.inJail = false;
-    player.jailTurns = 0;
-  }
-
-  payBail(playerId: string): boolean {
-    const player = this.players.find((p) => p.id === playerId);
-    if (!player || !player.inJail) return false;
-
-    if (!player.canAfford(BAIL_AMOUNT)) {
-      console.log(`${player.name} não pode pagar a fiança ($${BAIL_AMOUNT})`);
+    if (this.doubleRollCount >= 3) {
+      const player = this.getCurrentPlayer();
+      if (player) {
+        this.sendToJail(player.id);
+        this.emit('playerJailed', { playerId: player.id, reason: 'three_doubles' });
+      }
+      this.doubleRollCount = 0;
       return false;
     }
 
-    const success = player.deductMoney(BAIL_AMOUNT);
-    if (success) {
-      this.releaseFromJail(playerId);
-      console.log(`${player.name} pagou $${BAIL_AMOUNT} de fiança e saiu da prisão!`);
+    return true;
+  }
+
+  sendToJail(playerId: string): void {
+    const player = this.players.find(p => p.id === playerId);
+    if (player) {
+      player.inJail = true;
+      player.position = 10;
+      this.emit('playerJailed', { playerId, reason: 'sent_to_jail' });
     }
-    return success;
+  }
+
+  payBail(playerId: string): boolean {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || !player.inJail || player.money < 50) {
+      return false;
+    }
+
+    player.deductMoney(50);
+    player.inJail = false;
+    this.emit('bailPaid', { playerId, amount: 50, playerMoney: player.money });
+    return true;
+  }
+
+  releaseFromJail(playerId: string): void {
+    const player = this.players.find(p => p.id === playerId);
+    if (player && player.inJail) {
+      player.inJail = false;
+      this.emit('playerReleased', { playerId, reason: 'doubles_rolled' });
+    }
+  }
+
+  attemptJailEscape(playerId: string): { escaped: boolean; diceRoll: DiceRoll } {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || !player.inJail) {
+      return { escaped: false, diceRoll: { d1: 0, d2: 0, total: 0, isDouble: false } };
+    }
+
+    const diceRoll = this.rollDice();
+
+    if (diceRoll.isDouble) {
+      this.releaseFromJail(playerId);
+      const moveResult = this.moveCurrentPlayer(diceRoll.total);
+      return { escaped: true, diceRoll };
+    }
+
+    return { escaped: false, diceRoll };
+  }
+
+  rollAndMove(): { diceRoll: DiceRoll; moveResult: MoveResult | null; continuesTurn: boolean; jailStatus?: string } {
+    const player = this.getCurrentPlayer();
+    if (!player) return { diceRoll: { d1: 0, d2: 0, total: 0, isDouble: false }, moveResult: null, continuesTurn: false };
+
+    const diceRoll = this.rollDice();
+
+    if (player.inJail) {
+      if (diceRoll.isDouble) {
+        this.releaseFromJail(player.id);
+        const moveResult = this.moveCurrentPlayer(diceRoll.total);
+        return { diceRoll, moveResult, continuesTurn: false, jailStatus: 'escaped' };
+      } else {
+        return { diceRoll, moveResult: null, continuesTurn: false, jailStatus: 'still_in_jail' };
+      }
+    }
+
+    let continuesTurn = false;
+
+    if (diceRoll.isDouble) {
+      continuesTurn = this.processDoubleRoll();
+      if (!continuesTurn) {
+        return { diceRoll, moveResult: null, continuesTurn: false };
+      }
+    } else {
+      this.doubleRollCount = 0;
+    }
+
+    const moveResult = this.moveCurrentPlayer(diceRoll.total);
+    return { diceRoll, moveResult, continuesTurn: diceRoll.isDouble };
   }
 
   moveCurrentPlayer(steps: number): MoveResult | null {
@@ -106,42 +184,26 @@ export class GameEngine {
     }
 
     const tile = this.board.getTile(to);
-    return {
+
+    const moveResult = {
       playerId: player.id,
       from,
       to,
       tile,
       passedGo,
     };
-  }
 
-  applyTax(player: Player, tile: BoardTile, payTenPercent?: boolean): number {
-    if (tile.type !== TileType.TAX) return 0;
+    this.emit('playerMoved', moveResult);
 
-    let taxAmount = 0;
-
-    if (tile.name === "Income Tax") {
-      // Income Tax: player chooses 10% of total worth OR $200
-      const totalWorth = player.money + player.properties.reduce((sum, propId) => {
-        const prop = this.board.getProperty(propId);
-        return sum + (prop?.price ?? 0);
-      }, 0);
-
-      const tenPercentAmount = Math.floor(totalWorth * INCOME_TAX_PERCENT);
-      const fixedAmount = 200;
-
-      // payTenPercent parameter indicates player's choice
-      taxAmount = payTenPercent ? tenPercentAmount : fixedAmount;
-
-      console.log(`💸 ${player.name} paid Income Tax: $${taxAmount} (chose ${payTenPercent ? '10%' : '$200'})`);
-    } else if (tile.name === "Luxury Tax") {
-      // Luxury Tax: fixed $75
-      taxAmount = LUXURY_TAX_AMOUNT;
-      console.log(`💸 ${player.name} paid Luxury Tax: $${taxAmount}`);
+    if (from > to && to !== 0) {
+      this.emit('passGo', { playerId: player.id });
     }
 
-    player.deductMoney(taxAmount, { allowNegative: true });
-    return taxAmount;
+    if (tile.type === TileType.GO_TO_JAIL) {
+      this.sendToJail(player.id);
+    }
+
+    return moveResult;
   }
 
   buyProperty(playerId: string, propertyId: number): boolean {
@@ -162,6 +224,14 @@ export class GameEngine {
     player.addProperty(propertyId);
     this.board.setPropertyOwner(propertyId, playerId);
 
+    this.emit('propertyBought', {
+      playerId,
+      propertyId,
+      propertyName: property.name,
+      price: property.price,
+      playerMoney: player.money
+    });
+
     return true;
   }
 
@@ -175,27 +245,20 @@ export class GameEngine {
     const owner = this.players.find((p) => p.id === property.ownerId);
     if (!owner) return false;
 
-    let rent = property.rent;
+    const rent = property.rent;
 
-    // Calculate utility rent based on dice roll
-    if (property.color === "utility" && diceTotal) {
-      // Count how many utilities the owner has
-      const ownerUtilities = owner.properties.filter(propId => {
-        const prop = this.board.getProperty(propId);
-        return prop?.color === "utility";
-      }).length;
+    payer.deductMoney(rent);
+    owner.addMoney(rent);
 
-      // 1 utility: 4x dice roll, 2 utilities: 10x dice roll
-      const multiplier = ownerUtilities === 2 ? 10 : 4;
-      rent = diceTotal * multiplier;
-      console.log(`💸 Utility rent: ${diceTotal} × ${multiplier} = $${rent} (owner has ${ownerUtilities} utilities)`);
-    }
-
-    // Allow negative for rent (bankruptcy handling can come later)
-    const success = payer.deductMoney(rent, { allowNegative: true });
-    if (success) {
-      owner.addMoney(rent);
-    }
+    this.emit('rentPaid', {
+      payerId,
+      ownerId: property.ownerId,
+      propertyId,
+      propertyName: property.name,
+      rentAmount: rent,
+      payerMoney: payer.money,
+      ownerMoney: owner.money
+    });
 
     return success;
   }
