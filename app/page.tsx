@@ -22,6 +22,7 @@ export default function Home() {
   const [gameWinner, setGameWinner] = useState<string | null>(null);
   const [showPropertyManagement, setShowPropertyManagement] = useState(false);
   const [drawnCard, setDrawnCard] = useState<Card | null>(null);
+  const [isPayingBail, setIsPayingBail] = useState(false);
 
   // Initialize game on mount
   useEffect(() => {
@@ -160,6 +161,12 @@ export default function Home() {
       return;
     }
 
+    // Check if landed on JAIL tile naturally (Just Visiting)
+    if (finalTile.type === TileType.JAIL && currentPlayer.position === 10 && !currentPlayer.inJail) {
+      setMessage(`${currentPlayer.name} is Just Visiting Jail - no penalty!`);
+      setLogs(prev => [...prev, `${currentPlayer.name} landed on Jail (Just Visiting)`]);
+    }
+
     // Check if landed on CHANCE or COMMUNITY_CHEST tile
     if (finalTile.type === TileType.CHANCE || finalTile.type === TileType.COMMUNITY_CHEST) {
       const cardType = finalTile.type === TileType.CHANCE ? CardType.CHANCE : CardType.COMMUNITY_CHEST;
@@ -267,10 +274,12 @@ export default function Home() {
   };
 
   const handlePayBail = () => {
-    if (!game) return;
+    if (!game || isPayingBail) return; // Prevent double-click
 
     const currentPlayer = game.getCurrentPlayer();
     if (!currentPlayer || !currentPlayer.inJail) return;
+
+    setIsPayingBail(true); // Disable button immediately
 
     const success = game.payBail(currentPlayer.id);
     if (success) {
@@ -280,8 +289,12 @@ export default function Home() {
 
       // Force immediate state update to hide jail UI
       setGameState(game.getGameState());
+
+      // Reset after state updates
+      setTimeout(() => setIsPayingBail(false), 100);
     } else {
       setMessage(`❌ You don't have enough money for bail ($${BAIL_AMOUNT})`);
+      setIsPayingBail(false); // Re-enable if payment failed
     }
   };
 
@@ -724,14 +737,14 @@ export default function Home() {
                 </div>
                 <button
                   onClick={handlePayBail}
-                  disabled={currentPlayer.money < BAIL_AMOUNT}
+                  disabled={currentPlayer.money < BAIL_AMOUNT || isPayingBail}
                   className={`w-full font-bold py-2 px-4 rounded transition-all ${
-                    currentPlayer.money >= BAIL_AMOUNT
+                    currentPlayer.money >= BAIL_AMOUNT && !isPayingBail
                       ? 'bg-green-500 hover:bg-green-600 active:scale-95'
                       : 'bg-gray-500 cursor-not-allowed'
                   }`}
                 >
-                  Pay ${BAIL_AMOUNT} Bail
+                  {isPayingBail ? 'Paying...' : `Pay $${BAIL_AMOUNT} Bail`}
                 </button>
               </div>
             )}
